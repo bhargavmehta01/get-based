@@ -812,7 +812,15 @@ feed the unchanged combined-coverage collector. Four SvelteKit projects use up t
 two file shards each, with complete selected-case identity and finite capability
 skip checks at the final gate. Partial coverage inputs or missing selected jobs
 fail the gate. PR runs cancel superseded scoped runs; full release evidence stays
-separate. The required merge-check context remains `test`.
+separate. The required merge-check context remains `test`. Immutable Kit receipt artifacts keep each GitHub run attempt
+in a separate directory. A failed-job rerun may reuse successful receipts from the
+same source revision and workflow run, bounded between the collection and current
+gate attempts. Only the newest receipt for an identical declared shard replaces
+its predecessor; a failed newest receipt never falls back to an older pass.
+Every selected case must still appear exactly once, with one native test attempt,
+unchanged declarations and only the existing finite capability skips. Different
+revisions/runs, future attempts, ambiguous receipts and overlapping shards fail
+qualification.
 
 Use focused local unit, collection and headless browser checks when changing this
 orchestration. These checks validate the workflow contracts; only a real GitHub

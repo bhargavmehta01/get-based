@@ -299,6 +299,8 @@ describe('shipping transfer-budget PR scope', () => {
     expect(workflow.match(/ci-artifact.mjs verify --artifact dist --transport \.local-notes\/ci\/transport --github-env/g)).toHaveLength(5);
     expect(workflow).toContain('run: node scripts/ci-plan.mjs --run-kit "$LANE" --output "$CI_TEST_PLAN"');
     expect(workflow).toContain('ci-results.mjs kit --collection .local-notes/ci/kit-collection.json');
+    expect(workflow).toContain('name: kit-receipt-${{ matrix.id }}-attempt-${{ github.run_attempt }}');
+    expect(workflow).toContain('path: .local-notes/ci/kit-receipts\n          merge-multiple: false');
     expect(workflow).not.toContain('performance:check -- --record');
     expect(workflow).not.toContain('sveltekit-performance-budget.mjs --record');
   });
