@@ -10,6 +10,8 @@ live at [docs.getbased.health](https://docs.getbased.health).
   acceptance contracts.
 - [Presentation ownership](presentation-ownership.md): feature entry points,
   private-field/transaction ownership and asynchronous UI/lazy-loading contracts.
+- [Relay self-service routing](sync-self-service.md): device-local storage endpoint
+  configuration and reverse-proxy boundaries.
 - [Optional integrations](optional-integrations.md): provider activation, Companion,
   operator metadata, voice, Agent Access and network boundaries.
 - [Biology Scores AI lifecycle](biology-ai-lifecycle.md): inference triggers,
