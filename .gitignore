@@ -3634,3 +3634,5 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 # Generated native keyboard traversal helper
 /tests/helpers/native-tab-key.js
 /tests/helpers/native-tab-key.js.map
+
+/js/wearables-manual-sync.js

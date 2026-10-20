@@ -482,8 +482,11 @@ the higher-layer behavior through a narrow runtime seam.
 - Secrets and sensitive rows use the existing encryption and IndexedDB paths.
   Do not introduce plaintext fallbacks for OAuth tokens, AI keys, wallet
   proofs, genetics, or health records.
-- Raw wearable and cycle stores remain device-local unless an explicit,
-  privacy-reviewed summary surface is added to sync.
+- Raw vendor wearable and cycle stores remain device-local. Explicit user-entered
+  weight, blood pressure and pulse use the encrypted `manualBodyReadings` Sync
+  map, keyed by metric and date; source histories from vendors or file imports
+  are excluded. The local Reading store remains the display source of truth,
+  reconciled from this narrow map with deletion intent and guarded profile writes.
 - Supplement and medication status is derived from dated periods. Product-label
   facts, a user's regimen, inactive materials, and source quality evidence stay
   separate; AI consumers use the bounded projections in `supplement-context.js`.

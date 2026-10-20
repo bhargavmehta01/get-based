@@ -2,7 +2,7 @@ import type { MapIdentityConfig } from './sync-delta-surface-config.js';
 import type { DeltaItemRow, DeltaImportedData } from './sync-delta-row-codec.js';
 // sync-delta-map-merge.js - Pull-side keyed-map row overlay helper.
 
-import { getAt, setAt } from './data-merge.js';
+import { getAt, setAt, pickTimestamp } from './data-merge.js';
 import { recordPullDeltaSurface } from './sync-delta-pull-snapshot.js';
 import { DELTA_MAP_CONFIG } from './sync-delta-surface-config.js';
 import { _isAllowlistSafeId, _isProtoPollutionKey } from './sync-delta-id.js';
@@ -70,6 +70,7 @@ export async function mergeMapRowsIntoImported(
   // raw `parsed.k` is what we write to curMap.
   for (const [rawKey, entry] of liveByRawKey) {
     if (_isProtoPollutionKey(rawKey)) continue;
+    if (arrayName === 'manualBodyReadings' && pickTimestamp(curMap![rawKey]) > pickTimestamp(entry.v)) continue;
     curMap![rawKey] = entry.v;
   }
   recordPullDeltaSurface(arrayName, { live: liveByRawKey.size, tombstones: tombItemIds.size });

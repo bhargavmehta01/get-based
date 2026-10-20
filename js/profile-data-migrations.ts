@@ -244,6 +244,8 @@ export function migrateProfileData(data: Partial<ProfileData>): NormalizedProfil
   if (data.biometrics === undefined) data.biometrics = null;
   if (!data.manualMetricTombstones || typeof data.manualMetricTombstones !== 'object'
       || Array.isArray(data.manualMetricTombstones)) data.manualMetricTombstones = {};
+  if (!data.manualBodyReadings || typeof data.manualBodyReadings !== 'object'
+      || Array.isArray(data.manualBodyReadings)) data.manualBodyReadings = {};
   if (data.sunSessions === undefined) data.sunSessions = [];
   if (data.deviceSessions === undefined) data.deviceSessions = [];
   if (data.lightDevices === undefined) data.lightDevices = [];

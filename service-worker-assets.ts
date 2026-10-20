@@ -338,7 +338,7 @@ const APP_SHELL = [ // Includes dynamic chat and Knowledge Base modules for firs
   '/js/wearables-ultrahuman.js', '/js/wearables-ultrahuman-auth.js', '/js/wearables-whoop.js', '/js/wearables-whoop-auth.js',
   '/js/wearables-fitbit.js', '/js/wearables-fitbit-auth.js', '/js/wearables-polar.js', '/js/wearables-polar-auth.js',
   '/js/wearables-google-health.js', '/js/wearables-google-health-auth.js', '/js/wearables-credential-vault.js', '/js/wearables-apple-health-runtime.js',
-  '/js/wearables-apple-health.js', '/js/wearables-apple-health-parser.js', '/js/wearables-manual.js', '/js/brand-assets.js',
+  '/js/wearables-apple-health.js', '/js/wearables-apple-health-parser.js', '/js/wearables-manual.js', '/js/wearables-manual-sync.js', '/js/brand-assets.js',
   '/js/modal-lifecycle.js', '/js/modal-focusable.js', '/js/sun.js', '/js/sun-location.js',
   '/js/sun-active-session.js', '/js/sun-active-session-format.js', '/js/sun-channel-metrics.js', '/js/sun-session-model.js',
   '/js/sun-sessions-store.js', '/js/sun-session-ui.js', '/js/sun-session-log-modal.js', '/js/sun-session-ui-hooks.js',

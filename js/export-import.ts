@@ -375,6 +375,13 @@ export function importDataJSON(file: File) {
         // Manual wearable deletions are privacy state. Merge by the newest
         // deletion clock so importing an older backup cannot resurrect a
         // reading that was deleted later on this or another device.
+        if (json.manualBodyReadings && typeof json.manualBodyReadings === 'object' && !Array.isArray(json.manualBodyReadings)) {
+          const target = state.importedData.manualBodyReadings || (state.importedData.manualBodyReadings = {});
+          for (const [key, value] of Object.entries(json.manualBodyReadings)) {
+            if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+            if (!Object.hasOwn(target, key)) target[key] = value as import('../types/app-state.js').ManualBodyReading;
+          }
+        }
         if (json.manualMetricTombstones && typeof json.manualMetricTombstones === 'object'
             && !Array.isArray(json.manualMetricTombstones)) {
           if (!(state.importedData as ImportedDataOperations).manualMetricTombstones) (state.importedData as ImportedDataOperations).manualMetricTombstones = {};
@@ -687,7 +694,7 @@ async function _importDatabaseBundle(json: ImportBodyOperations) {
           sortImportedArray(current, 'importSnapshots', (a, b) => ((b.importedAt || 0) as number) - ((a.importedAt || 0) as number));
         }
         // Marker definitions and display overrides: preserve existing values.
-        for (const field of ['customMarkers', 'refOverrides', 'categoryLabels', 'categoryIcons', 'markerLabels', 'markerPlacements', 'manualValues']) {
+        for (const field of ['customMarkers', 'refOverrides', 'categoryLabels', 'categoryIcons', 'markerLabels', 'markerPlacements', 'manualValues', 'manualBodyReadings']) {
           if (importData[field] && typeof importData[field] === 'object') {
             if (!current[field]) current[field] = {};
             for (const [k, v] of Object.entries(importData[field] as Record<string, unknown>)) {
