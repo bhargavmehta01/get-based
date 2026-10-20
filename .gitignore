@@ -3636,3 +3636,9 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 /tests/helpers/native-tab-key.js.map
 
 /js/wearables-manual-sync.js
+
+# Generated exact manual-Sync Wearables receipt expectations
+/tests/helpers/wearable-manual-sync-expectations.js
+/tests/helpers/wearable-manual-sync-expectations.js.map
+/tests/wearable-manual-sync-expectations.test.js
+/tests/wearable-manual-sync-expectations.test.js.map

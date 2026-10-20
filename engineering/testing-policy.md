@@ -796,8 +796,14 @@ current nonpaint Chart configuration, callbacks, DOM, profile, storage, cache,
 device, focus, action and event/POST chronology remain checked against the
 authenticated native receipts. The existing 240-second case deadline and 64 MiB
 per-journey raw-pixel cap, eighteen unique ordered states and browser matrix
-remain unchanged. Portable fixture, ordering, one-byte pixel, geometry and paint
-corruption controls exercise these boundaries.
+remain unchanged. Manual-reading Sync adds a separately authored exact expectation
+for the twelve legacy mirror entries, accepted writes/deletion tombstones, per-field
+clocks and one backfill metadata record. Complete profile objects, committed JSON
+strings and device receipts still use full equality; unrelated historical fields
+and all frozen fixture bytes remain unchanged. The expected additions come from
+the fixed synthetic journey, never observed candidate output or runtime mirror
+helpers. Portable fixture, ordering, one-byte pixel, geometry and paint corruption
+controls exercise these boundaries.
 
 Wearables historical dataset coordinates remain authenticated and are reported
 when the current platform differs. Their active expectation is the independently
