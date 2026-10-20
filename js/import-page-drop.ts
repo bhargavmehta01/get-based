@@ -22,8 +22,9 @@ export function bindPageFileDrop(importFiles: (files: File[]) => Promise<unknown
   };
   const over = (event: DragEvent) => {
     if (!isFileDrag(event)) return;
+    if (isSpecialized(event)) { show(false); return; }
     event.preventDefault();
-    show(!isSpecialized(event) && !isDropZoneImportRunning());
+    show(!isDropZoneImportRunning());
   };
   const drop = (event: DragEvent) => {
     show(false);
@@ -33,17 +34,22 @@ export function bindPageFileDrop(importFiles: (files: File[]) => Promise<unknown
     const files = Array.from(event.dataTransfer?.files || []);
     if (files.length) void importFiles(files);
   };
+  const enter = (event: DragEvent) => { if (isFileDrag(event) && isSpecialized(event)) show(false); };
   const leave = (event: DragEvent) => { if (!event.relatedTarget) show(false); };
   const hide = () => show(false);
   const key = (event: KeyboardEvent) => { if (event.key === 'Escape') hide(); };
-  document.addEventListener('dragover', over);
+  document.addEventListener('dragenter', enter, true);
+  document.addEventListener('dragover', over, true);
+  document.addEventListener('drop', hide, true);
   document.addEventListener('drop', drop);
   document.addEventListener('dragleave', leave);
   document.addEventListener('keydown', key);
   view?.addEventListener('blur', hide);
   return () => {
     disposed = true; active = false; indicator?.dispose();
-    document.removeEventListener('dragover', over);
+    document.removeEventListener('dragenter', enter, true);
+    document.removeEventListener('dragover', over, true);
+    document.removeEventListener('drop', hide, true);
     document.removeEventListener('drop', drop);
     document.removeEventListener('dragleave', leave);
     document.removeEventListener('keydown', key);

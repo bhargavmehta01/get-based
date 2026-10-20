@@ -66,3 +66,17 @@ it('keeps ordinary single-type picker imports direct', async () => {
   expect(await confirmImportSelection({...buckets(), pdfFiles: [file]})).toBe(true);
   expect(mocks.confirm).not.toHaveBeenCalled();
 });
+
+it('clears page feedback when a specialized target stops drag and drop propagation', async () => {
+  document.body.innerHTML = '<div class="chat-panel-conversation"></div>';
+  const target = document.body.firstElementChild!, ownDrop = vi.fn(), importFiles = vi.fn();
+  for (const name of ['dragenter', 'dragover', 'drop']) target.addEventListener(name, event => {event.preventDefault(); event.stopPropagation(); if (name === 'drop') ownDrop();});
+  dispose = bindPageFileDrop(importFiles);
+  drag(document.body, 'dragover'); await vi.waitFor(() => expect(mocks.show).toHaveBeenLastCalledWith(true));
+  drag(target, 'dragenter'); expect(mocks.show).toHaveBeenLastCalledWith(false);
+  drag(document.body, 'dragover'); expect(mocks.show).toHaveBeenLastCalledWith(true);
+  drag(target, 'dragover'); expect(mocks.show).toHaveBeenLastCalledWith(false);
+  drag(document.body, 'dragover'); expect(mocks.show).toHaveBeenLastCalledWith(true);
+  drag(target, 'drop'); expect(mocks.show).toHaveBeenLastCalledWith(false);
+  expect(ownDrop).toHaveBeenCalledOnce(); expect(importFiles).not.toHaveBeenCalled();
+});

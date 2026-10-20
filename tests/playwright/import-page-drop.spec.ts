@@ -33,3 +33,22 @@ test('a populated Dashboard offers a page-wide import preview and cancellation h
   await expect(page.locator('body')).toHaveAttribute('data-imported-files', '1');
   await expect(page.locator('[data-page-import-drop]')).toHaveCount(0);
 });
+
+test('actual Chat drop ownership clears page feedback even when Chat stops propagation', async ({page}) => {
+  await page.goto('/app', {waitUntil: 'load'});
+  await page.evaluate(async () => {
+    await (await import('/js/chat-panel.js')).openChatPanel();
+    (await import('/js/import-drop-zone-runtime.js')).configureImportDropZoneRuntimeDeps({importDataJSON: () => {document.body.dataset.unwantedPageImport = 'yes';}});
+  });
+  await expect(page.locator('.chat-panel-conversation')).toBeVisible();
+  const drag = (kind: string, chat = false) => page.evaluate(({kind, chat}) => {
+    const transfer = new DataTransfer(); transfer.items.add(new File(['synthetic'], 'unsupported.bin', {type: 'application/octet-stream'}));
+    const target = chat ? document.querySelector('.chat-panel-conversation')! : document.body;
+    target.dispatchEvent(new DragEvent(kind, {bubbles: true, cancelable: true, dataTransfer: transfer}));
+  }, {kind, chat});
+  await drag('dragover'); await expect(page.locator('[data-page-import-drop]')).toBeVisible();
+  await drag('dragover', true); await expect(page.locator('[data-page-import-drop]')).toHaveCount(0);
+  await drag('dragover'); await expect(page.locator('[data-page-import-drop]')).toBeVisible();
+  await drag('drop', true); await expect(page.locator('[data-page-import-drop]')).toHaveCount(0);
+  expect(await page.locator('body').getAttribute('data-unwanted-page-import')).toBeNull();
+});
