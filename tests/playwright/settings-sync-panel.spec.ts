@@ -125,3 +125,22 @@ test('replaced Sync panels ignore stale identity and relay replies and remask li
   });
   await expect(panel).toHaveCount(0);
 });
+
+test('self-service URL is validated, device-local and independent of the WebSocket relay', async ({page}) => {
+  await openIsolatedSyncSetupPage(page);
+  await page.evaluate(async () => {
+    (window as unknown as {__settingsSyncSetupStub: unknown}).__settingsSyncSetupStub = {enabled: true, calls: [], relay: 'wss://relay.example:8443'};
+    const ui = await import('/js/settings-sync-panel-impl.js');
+    document.querySelector('#sync-section')!.innerHTML = ui.renderSyncSection(); ui.hydrateSettingsSyncPanel();
+  });
+  const panel = page.locator('[data-sync-settings-view]'); await panel.locator('summary').click();
+  const input = panel.getByLabel('Self-service URL (optional)');
+  await input.fill('https://self.example:4443/');
+  await panel.getByRole('button', {name: 'Save self-service URL', exact: true}).click();
+  expect(await page.evaluate(() => localStorage.getItem('labcharts-self-url'))).toBe('https://self.example:4443');
+  await expect(panel.locator('#sync-relay-input')).toHaveValue('wss://relay.example:8443');
+  await input.fill('wss://wrong.example'); await panel.getByRole('button', {name: 'Save self-service URL', exact: true}).click();
+  expect(await page.evaluate(() => localStorage.getItem('labcharts-self-url'))).toBe('https://self.example:4443');
+  await input.fill(''); await panel.getByRole('button', {name: 'Save self-service URL', exact: true}).click();
+  expect(await page.evaluate(() => localStorage.getItem('labcharts-self-url'))).toBeNull();
+});
