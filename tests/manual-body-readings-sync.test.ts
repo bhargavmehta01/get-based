@@ -5,8 +5,10 @@ import {state} from '../js/state.js';
 import {runPostProfileStartupMaintenance} from '../js/startup-maintenance.js';
 import {createDefaultProfileData} from '../js/profile.js';
 import {saveImportedData} from '../js/data.js';
+import {encryptedGetItem} from '../js/crypto.js';
 import {logManualMetric, logManualBP, deleteManualMetric, deleteAllManualMetrics, parseManualMirrorEntry} from '../js/wearables-manual.js';
 import {applyPulledManualBodyReadings, catchUpManualBodyReadings} from '../js/wearables-manual-sync.js';
+import * as manualStore from '../js/wearables-store.js';
 import {getDaily, getMeta, clearSource, upsertDaily, deleteWearablesDB, configureWearablesStoreCrypto} from '../js/wearables-store.js';
 import {mergeImportedData} from '../js/data-merge.js';
 import {mergeMapRowsIntoImported} from '../js/sync-delta-map-merge.js';
@@ -132,4 +134,39 @@ it('keeps shared legacy context when deleting one of several unbackfilled manual
   expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 80, note: 'Shared legacy note'});
   expect(state.importedData.manualBodyReadings![key('note')]!.value).toBe('Shared legacy note');
   expect(state.importedData.manualBodyReadings![key('rhr')]!.value).toBeNull();
+});
+
+it('retains the write-site rejection of dangerous raw map keys', async () => {
+  const imported = {manualBodyReadings: {}};
+  for (const name of ['__proto__', 'constructor', 'prototype']) {
+    await mergeMapRowsIntoImported(imported, 'manualBodyReadings', [{itemId: name, payload: JSON.stringify({k: name, v: {value: 80, updatedAt: 300}})}]);
+    expect(Object.hasOwn(imported.manualBodyReadings, name)).toBe(false);
+  }
+  expect(Object.getPrototypeOf(imported.manualBodyReadings)).toBe(Object.prototype);
+});
+
+it.each(['edit', 'delete-all'])('keeps a concurrent %s that commits after the legacy scan starts', async operation => {
+  await upsertDaily(profile, {source: 'manual', date, weight: 80});
+  let scanned!: () => void, release!: () => void;
+  const ready = new Promise<void>(resolve => {scanned = resolve;});
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  const original = manualStore.getDailyRange;
+  vi.spyOn(manualStore, 'getDailyRange').mockImplementationOnce(async (...args) => {
+    const rows = await original(...args); scanned(); await gate; return rows;
+  });
+  const backfill = catchUpManualBodyReadings(profile);
+  await ready;
+  if (operation === 'edit') await logManualMetric(profile, 'weight', {date, value: 82});
+  else await deleteAllManualMetrics(profile);
+  release(); await backfill;
+  const stored = JSON.parse((await encryptedGetItem(`labcharts-${profile}-imported`))!) as typeof state.importedData;
+  if (operation === 'edit') {
+    expect(stored.manualBodyReadings![key('weight')]).toMatchObject({value: 82, updatedAt: expect.any(Number)});
+    expect(stored.manualBodyReadings![key('weight')]!.updatedAt).toBeGreaterThan(0);
+    expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 82});
+  } else {
+    expect(stored.manualBodyReadings![key('weight')]).toBeUndefined();
+    expect(stored.manualMetricTombstones!['weight.all']).toBeGreaterThan(0);
+    expect(await getDaily(profile, 'manual', date)).toBeNull();
+  }
 });

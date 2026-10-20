@@ -3,13 +3,15 @@ import type {StoredWearableRow} from './wearable-storage-types.js';
 import type {ProfileData} from '../types/app-state.js';
 import type {WearableProfileMutation} from './wearable-persistence-types.js';
 import {state} from './state.js';
+import {encryptedGetItem} from './crypto.js';
+import {profileStorageKey, migrateProfileData} from './profile.js';
 import {getSyncAppOwner} from './sync-runtime.js';
 import {isProfileReadBlocked} from './profile-load-safety.js';
 import {queueManualRowWrite} from './wearables-manual-lock.js';
 import {getDaily, getDailyRange, getMeta, setMeta, upsertDaily, deleteDaily} from './wearables-store.js';
 import {
   MANUAL_METRICS, MANUAL_MIRROR_FIELDS, MANUAL_HISTORY_START, MANUAL_HISTORY_END,
-  captureManualMutation, persistManualMutation, updateManualConnection,
+  persistManualMutation, updateManualConnection,
   isManualMetricTombstoned, manualMirror, manualMirrorKey, mirrorManualPatch, parseManualMirrorEntry,
 } from './wearables-manual.js';
 type ManualData = WearableProfileMutation & Partial<Pick<ProfileData, 'manualBodyReadings' | 'manualMetricTombstones'>>;
@@ -64,10 +66,16 @@ export async function applyPulledManualBodyReadings(profileId: string, data: Man
 }
 
 /** Page load and profile switch share one add-only upgrade; empty/locked IDB never implies deletion. */
-export async function catchUpManualBodyReadings(profileId: string) {
+export async function catchUpManualBodyReadings(profileId: string, attempt = 0): Promise<{skipped: 'obsolete' | 'profile-missing' | 'profile-unavailable'} | {written: number; added: number}> {
   const current = ownership(profileId);
   if (!current()) return {skipped: 'obsolete' as const};
-  const {imported, baseData} = captureManualMutation(profileId);
+  const storageKey = profileStorageKey(profileId, 'imported');
+  const raw = await encryptedGetItem(storageKey, {throwOnDecryptError: true});
+  if (!current()) return {skipped: 'obsolete' as const};
+  if (raw == null) return {skipped: 'profile-missing' as const};
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {skipped: 'profile-unavailable' as const};
+  const baseData = migrateProfileData(parsed as ProfileData), imported = structuredClone(baseData);
   const applied = await applyPulledManualBodyReadings(profileId, imported);
   if (!current()) return {skipped: 'obsolete' as const};
   const backfilled = await getMeta(profileId, BACKFILL_FLAG);
@@ -89,7 +97,15 @@ export async function catchUpManualBodyReadings(profileId: string) {
   }
   if (added || applied.connected) {
     if (!imported.wearableConnections?.manual && added) updateManualConnection(imported);
-    await persistManualMutation(profileId, imported, baseData);
+    try {
+      // The canonical read/merge/write checks this exact snapshot while holding
+      // the profile lock. A user edit/deletion after the scan must win.
+      await persistManualMutation(profileId, imported, baseData, {expectedData: raw, notifyOnStaleSnapshot: false});
+    } catch (error) {
+      const latest = await encryptedGetItem(storageKey, {throwOnDecryptError: true});
+      if (current() && latest !== raw && attempt < 2) return catchUpManualBodyReadings(profileId, attempt + 1);
+      throw error;
+    }
   }
   if (!current()) return {skipped: 'obsolete' as const};
   if (markBackfilled) await setMeta(profileId, BACKFILL_FLAG, {at: Date.now()});

@@ -68,9 +68,11 @@ export async function mergeMapRowsIntoImported(
   // Apply live entries under their original key (preserves `:` for
   // manualValues etc). Reject proto-pollution keys at assignment because the
   // raw `parsed.k` is what we write to curMap.
+  const newerManualField = (key: string, incoming: unknown) => arrayName === 'manualBodyReadings'
+    && pickTimestamp(curMap![key]) > pickTimestamp(incoming);
   for (const [rawKey, entry] of liveByRawKey) {
     if (_isProtoPollutionKey(rawKey)) continue;
-    if (arrayName === 'manualBodyReadings' && pickTimestamp(curMap![rawKey]) > pickTimestamp(entry.v)) continue;
+    if (newerManualField(rawKey, entry.v)) continue;
     curMap![rawKey] = entry.v;
   }
   recordPullDeltaSurface(arrayName, { live: liveByRawKey.size, tombstones: tombItemIds.size });

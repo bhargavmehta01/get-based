@@ -4,15 +4,18 @@ vi.mock('../js/wearables-store.js', async original => ({...await original<typeof
 vi.mock('../js/data.js', () => ({saveImportedDataForProfile: mocks.save, saveImportedData: vi.fn()}));
 vi.mock('../js/wearables-summary.js', () => ({syncWearableSummary: vi.fn()}));
 import {state} from '../js/state.js';
+import {encryptedGetItem, encryptedSetItem, encryptedRemoveItem} from '../js/crypto.js';
 import {createDefaultProfileData} from '../js/profile.js';
 import {setSyncAppOwner} from '../js/sync-runtime.js';
 import {applyPulledManualBodyReadings, catchUpManualBodyReadings} from '../js/wearables-manual-sync.js';
 const date = '2026-09-21';
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetAllMocks(); state.currentProfile = 'origin'; state.importedData = createDefaultProfileData();
+  localStorage.clear(); await encryptedRemoveItem('labcharts-origin-imported');
+  await encryptedSetItem('labcharts-origin-imported', JSON.stringify(state.importedData));
   setSyncAppOwner({id: 'owner-a'}); mocks.save.mockResolvedValue(true); mocks.range.mockResolvedValue([]); mocks.meta.mockResolvedValue(null);
 });
-afterEach(() => setSyncAppOwner(null));
+afterEach(async () => {setSyncAppOwner(null); await encryptedRemoveItem('labcharts-origin-imported');});
 it.each(['profile', 'data', 'owner'])('does not write retired incoming data when %s changes during row lookup', async kind => {
   const destination = createDefaultProfileData();
   mocks.read.mockImplementation(async () => {
@@ -44,4 +47,15 @@ it('does not mark the upgrade complete after profile metadata persistence fails'
   mocks.range.mockResolvedValue([{source: 'manual', date, weight: 80}]); mocks.save.mockResolvedValue(false);
   await expect(catchUpManualBodyReadings('origin')).rejects.toThrow(/save/i);
   expect(mocks.flag).not.toHaveBeenCalled();
+});
+
+it('bounds retries when peer changes keep invalidating the upgrade snapshot', async () => {
+  mocks.range.mockResolvedValue([{source: 'manual', date, weight: 80}]);
+  mocks.save.mockImplementation(async () => {
+    const stored = JSON.parse((await encryptedGetItem('labcharts-origin-imported'))!) as typeof state.importedData;
+    stored.contextNotes += 'peer edit'; await encryptedSetItem('labcharts-origin-imported', JSON.stringify(stored));
+    return false;
+  });
+  await expect(catchUpManualBodyReadings('origin')).rejects.toThrow(/save/i);
+  expect(mocks.save).toHaveBeenCalledTimes(3); expect(mocks.flag).not.toHaveBeenCalled();
 });

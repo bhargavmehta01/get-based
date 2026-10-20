@@ -10,7 +10,7 @@ The human-maintained architecture contract is in [`ARCHITECTURE.md`](ARCHITECTUR
 | Metric | Current |
 | --- | ---: |
 | Modules | 1849 |
-| Internal import edges | 5602 |
+| Internal import edges | 5604 |
 | Dynamic internal edges | 130 |
 | Modules participating in cycles | 0 |
 | Cyclic components | 0 |
@@ -72,9 +72,9 @@ High fan-in modules have many dependants; high fan-out modules coordinate many d
 | [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts) | 84 | [`js/settings.ts`](js/settings.ts) | 34 |
 | [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts) | 65 | [`js/provider-wallet-panels.ts`](js/provider-wallet-panels.ts) | 30 |
 | [`js/api.ts`](js/api.ts) | 52 | [`js/sync-configure.ts`](js/sync-configure.ts) | 29 |
-| [`js/profile.ts`](js/profile.ts) | 51 | [`js/pdf-import.ts`](js/pdf-import.ts) | 28 |
-| [`js/schema.ts`](js/schema.ts) | 41 | [`js/wearables-connect.ts`](js/wearables-connect.ts) | 28 |
-| [`js/crypto.ts`](js/crypto.ts) | 40 | [`js/chat-empty-state.ts`](js/chat-empty-state.ts) | 26 |
+| [`js/profile.ts`](js/profile.ts) | 52 | [`js/pdf-import.ts`](js/pdf-import.ts) | 28 |
+| [`js/crypto.ts`](js/crypto.ts) | 41 | [`js/wearables-connect.ts`](js/wearables-connect.ts) | 28 |
+| [`js/schema.ts`](js/schema.ts) | 41 | [`js/chat-empty-state.ts`](js/chat-empty-state.ts) | 26 |
 | [`js/ai-feature-routing.ts`](js/ai-feature-routing.ts) | 39 | [`js/views-runtime.ts`](js/views-runtime.ts) | 26 |
 | [`js/data-merge.ts`](js/data-merge.ts) | 34 | [`js/export.ts`](js/export.ts) | 25 |
 | [`js/retrying-module-loader.ts`](js/retrying-module-loader.ts) | 30 | [`js/context-cards.ts`](js/context-cards.ts) | 24 |
@@ -5175,7 +5175,7 @@ Native browser modules shipped with the static application.
 - [`js/wearables-manual-detail.ts`](js/wearables-manual-detail.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/profile.ts`](js/profile.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts), [`js/wearable-adapters.ts`](js/wearable-adapters.ts), [`js/wearables-detail-runtime.ts`](js/wearables-detail-runtime.ts), [`js/wearables-entry-presentation.ts`](js/wearables-entry-presentation.ts), [`js/wearables-formatters.ts`](js/wearables-formatters.ts), [`js/wearables-manual-form-ui.ts`](js/wearables-manual-form-ui.ts), [`js/wearables-manual.ts`](js/wearables-manual.ts)
 - [`js/wearables-manual-form-ui.ts`](js/wearables-manual-form-ui.ts) → [`js/wearables-entry-presentation.ts`](js/wearables-entry-presentation.ts)
 - [`js/wearables-manual-lock.ts`](js/wearables-manual-lock.ts) → no in-scope imports
-- [`js/wearables-manual-sync.ts`](js/wearables-manual-sync.ts) → [`js/profile-load-safety.ts`](js/profile-load-safety.ts), [`js/state.ts`](js/state.ts), [`js/sync-runtime.ts`](js/sync-runtime.ts), [`js/wearables-manual-lock.ts`](js/wearables-manual-lock.ts), [`js/wearables-manual.ts`](js/wearables-manual.ts), [`js/wearables-store.ts`](js/wearables-store.ts)
+- [`js/wearables-manual-sync.ts`](js/wearables-manual-sync.ts) → [`js/crypto.ts`](js/crypto.ts), [`js/profile-load-safety.ts`](js/profile-load-safety.ts), [`js/profile.ts`](js/profile.ts), [`js/state.ts`](js/state.ts), [`js/sync-runtime.ts`](js/sync-runtime.ts), [`js/wearables-manual-lock.ts`](js/wearables-manual-lock.ts), [`js/wearables-manual.ts`](js/wearables-manual.ts), [`js/wearables-store.ts`](js/wearables-store.ts)
 - [`js/wearables-manual.ts`](js/wearables-manual.ts) → [`js/data.ts`](js/data.ts), [`js/state.ts`](js/state.ts), [`js/wearable-adapters.ts`](js/wearable-adapters.ts), [`js/wearables-connect.ts`](js/wearables-connect.ts) *(dynamic)*, [`js/wearables-formatters.ts`](js/wearables-formatters.ts), [`js/wearables-manual-lock.ts`](js/wearables-manual-lock.ts), [`js/wearables-store.ts`](js/wearables-store.ts), [`js/wearables-summary.ts`](js/wearables-summary.ts)
 - [`js/wearables-oura-auth.ts`](js/wearables-oura-auth.ts) → [`js/proxy-runtime.ts`](js/proxy-runtime.ts), [`js/utils.ts`](js/utils.ts), [`js/wearable-oauth-state.ts`](js/wearable-oauth-state.ts), [`js/wearable-oauth-tokens.ts`](js/wearable-oauth-tokens.ts), [`js/wearables-auth-runtime.ts`](js/wearables-auth-runtime.ts)
 - [`js/wearables-oura.ts`](js/wearables-oura.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/proxy-runtime.ts`](js/proxy-runtime.ts), [`js/utils.ts`](js/utils.ts), [`js/wearable-adapters.ts`](js/wearable-adapters.ts)

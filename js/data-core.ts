@@ -220,7 +220,10 @@ export function createDataCore(ports: DataCorePorts) {
         const key = (0, ports.profileStorageKey)(profileId, 'imported');
         const previous = await (0, ports.encryptedGetItem)(key, { throwOnDecryptError: true });
         // Explicit restores must retry if their reviewed snapshot changed.
-        if (options.expectedData !== undefined && previous !== options.expectedData) throw new ports.ProfileWriteConflict('Stale import');
+        if (options.expectedData !== undefined && previous !== options.expectedData) {
+          if (options.notifyOnStaleSnapshot === false) return false;
+          throw new ports.ProfileWriteConflict('Stale import');
+        }
         const stored = previous != null && (base || options.expectedContextNotes !== undefined || expectedFields.length > 0) ? JSON.parse(previous) : {};
         // Notes drafts can outlive a view/profile load. Check their observed
         // value inside the same locked read/merge/write that commits the edit.

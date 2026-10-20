@@ -1,3 +1,4 @@
+import type {ProfileSaveOptions} from './data-core-types.js';
 import type { ProfileData, ManualBodyReading } from '../types/app-state.js';
 import type { Biometrics, BloodPressureValue } from '../types/profile-context-data.js';
 import type { StoredWearableRow } from './wearable-storage-types.js';
@@ -298,8 +299,8 @@ export function captureManualMutation(profileId: string) {
   return { baseData, imported: structuredClone(baseData) };
 }
 
-export async function persistManualMutation(profileId: string, imported: ManualProfile, baseData: ManualProfile) {
-  if (!await saveImportedDataForProfile(profileId, imported, { baseData })) {
+export async function persistManualMutation(profileId: string, imported: ManualProfile, baseData: ManualProfile, options: Pick<ProfileSaveOptions, 'expectedData' | 'notifyOnStaleSnapshot'> = {}) {
+  if (!await saveImportedDataForProfile(profileId, imported, { baseData, ...options })) {
     throw new Error('Could not save manual measurement metadata. Check your data before retrying.');
   }
 }

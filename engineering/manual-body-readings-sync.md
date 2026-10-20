@@ -25,7 +25,9 @@ Ordinary page startup and profile switching share lazy catch-up. A one-time,
 add-only upgrade copies pre-existing manual rows after applying incoming values.
 It never scans vendor histories, overwrites an existing mirror key, infers a
 remote deletion or marks an empty/locked read as successfully upgraded. The
-completion flag follows successful profile persistence. Profile/data/Sync-owner
+completion flag follows successful profile persistence. The upgrade commits only
+if its canonical stored snapshot still matches inside the profile write lock; a
+concurrent edit or deletion triggers a bounded retry from current data. Profile/data/Sync-owner
 changes retire asynchronous reconciliation work. The module is requested only
 when manual history or a manual mirror exists.
 
