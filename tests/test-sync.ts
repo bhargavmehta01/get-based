@@ -1256,10 +1256,23 @@ const diagnosePresentationContracts = syncLegacyDiagnoseContracts();
     /_signSelfRequest[\s\S]{0,1000}\$\{context\}:\$\{ownerId\}:\$\{timestamp\}[\s\S]{0,400}name:\s*'HMAC',\s*hash:\s*'SHA-256'/.test(syncRelayHealthSrc));
   assert('_signSelfRequest signs with the owner writeKey (not mnemonic)',
     /_signSelfRequest[\s\S]{0,800}owner\.writeKey/.test(syncRelayHealthSrc));
+  // URL ownership moved to the shared validated settings helper. Exercise the
+  // original invariants through that actual owner rather than its old location.
+  const selfService = await import('../js/sync-relay-self-service.js');
   assert('_getSelfBaseUrl swaps wss → https and ws → http',
-    /_getSelfBaseUrl[\s\S]{0,800}wss:[\s\S]{0,100}https:[\s\S]{0,200}ws:[\s\S]{0,100}http:/.test(syncRelayHealthSrc));
-  assert('_getSelfBaseUrl honors labcharts-self-url localStorage override (self-host escape hatch)',
-    /SELF_URL_OVERRIDE_KEY\s*=\s*'labcharts-self-url'[\s\S]{0,800}_getSelfBaseUrl[\s\S]{0,400}getItem\(SELF_URL_OVERRIDE_KEY\)[\s\S]{0,200}\^https\?:/.test(syncRelayHealthSrc));
+    syncRelayHealthSrc.includes('resolveRelaySelfServiceUrl')
+      && selfService.resolveRelaySelfServiceUrl('wss://relay.example.test:8443/ws') === 'https://relay.example.test:8443'
+      && selfService.resolveRelaySelfServiceUrl('ws://relay.example.test:8443/ws') === 'http://relay.example.test:8443');
+  const previousSelfServiceUrl = localStorage.getItem('labcharts-self-url');
+  try {
+    localStorage.setItem('labcharts-self-url', 'https://self.example.test:4443/');
+    assert('_getSelfBaseUrl honors labcharts-self-url localStorage override (self-host escape hatch)',
+      syncRelayHealthSrc.includes('getRelaySelfServiceUrl()')
+        && selfService.resolveRelaySelfServiceUrl('wss://relay.example.test', selfService.getRelaySelfServiceUrl()) === 'https://self.example.test:4443');
+  } finally {
+    if (previousSelfServiceUrl === null) localStorage.removeItem('labcharts-self-url');
+    else localStorage.setItem('labcharts-self-url', previousSelfServiceUrl);
+  }
   assert('Cap is 50 MB (RELAY_OWNER_QUOTA_BYTES)',
     /RELAY_OWNER_QUOTA_BYTES = 50 \* 1024 \* 1024/.test(syncRelayHealthSrc));
 

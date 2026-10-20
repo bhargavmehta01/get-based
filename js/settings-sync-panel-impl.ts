@@ -1,3 +1,4 @@
+import { setRelaySelfServiceUrl } from './sync-relay-self-service.js';
 // settings-sync-panel-impl.js — lazy Cross-device sync and Agent Access settings UI
 
 import { getErrorMessage } from './caught-error.js';
@@ -133,6 +134,8 @@ async function handleSettingsSyncClick(event: Event) {
     copySyncIdentityCode();
   } else if (action === 'open-restore-dialog') {
     openRestoreMnemonicDialog();
+  } else if (action === 'save-self-service') {
+    saveSyncSelfServiceUrl();
   } else if (action === 'save-relay') {
     saveSyncRelay();
   } else if (action === 'show-sync-diagnose') {
@@ -421,6 +424,17 @@ function copySyncIdentityCode() {
   }).catch(() => {
     showNotification('Could not access clipboard', 'error');
   });
+}
+
+function saveSyncSelfServiceUrl() {
+  const input = document.getElementById('sync-self-service-input') as HTMLInputElement | null;
+  if (!input) return;
+  try {
+    input.value = setRelaySelfServiceUrl(input.value);
+    showNotification('Self-service URL saved on this device — use Refresh in Sync status & storage to check it.', 'success');
+  } catch (error) {
+    showNotification(getErrorMessage(error, 'Could not save the self-service URL.'), 'error');
+  }
 }
 
 function saveSyncRelay() {

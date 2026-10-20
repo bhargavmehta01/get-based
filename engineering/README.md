@@ -12,6 +12,8 @@ live at [docs.getbased.health](https://docs.getbased.health).
   private-field/transaction ownership and asynchronous UI/lazy-loading contracts.
 - [Manual body reading Sync](manual-body-readings-sync.md): the narrow manual
   history surface, local Reading-store reconciliation and privacy boundaries.
+- [Relay self-service routing](sync-self-service.md): device-local storage endpoint
+  configuration and reverse-proxy boundaries.
 - [Optional integrations](optional-integrations.md): provider activation, Companion,
   operator metadata, voice, Agent Access and network boundaries.
 - [Biology Scores AI lifecycle](biology-ai-lifecycle.md): inference triggers,

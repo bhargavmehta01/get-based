@@ -4,10 +4,17 @@ import {expect,test,type Page} from '@playwright/test';
 import {createDefaultProfileData} from '../../js/profile.js';
 import type {ProfileData} from '../../types/app-state.js';
 import {startKitServer} from './kit-server.js';
+import {lightDeviceCatalogRoute} from '../helpers/light-device-catalog-fixture.js';
 import {installDiscussionFixture} from '../helpers/chat-discussion-fixture.js';
 import {readComparisonAcceptanceProfile} from '../helpers/nutrition-comparison-fixture.js';
-import {installOfflineStartupDiagnostics} from '../helpers/offline-launch-diagnostics.js';
+import {installOfflineStartupDiagnostics,captureOfflineRouteFailureDiagnostics} from '../helpers/offline-launch-diagnostics.js';
 import {readyLightArtifact as ready,openLightArtifact as openLight} from '../helpers/light-artifact-navigation.js';
+// Observe native worker/cache state only after failure; keep the original
+// readiness requirement, complete assertions and test deadlines unchanged.
+test.afterEach(async({context},info)=>{
+ if(info.status===info.expectedStatus)return;
+ for(const page of context.pages())await captureOfflineRouteFailureDiagnostics(page,info,[]);
+});
 type API=Pick<typeof import('../../js/recommendations.js'),'renderChannelDeficitDeviceRecs'|'loadCatalog'|'isProductRecsEnabled'>;
 // The renderer is a maintained public module contract, not an automatic Light
 // page insertion. Locate its real bundled namespace from the exact artifact.
@@ -71,7 +78,7 @@ test('static public device options and actual settings opt-out work offline with
   test.setTimeout(120000);await installDiscussionFixture(context);await context.route('https://**',route=>route.abort());await installOfflineStartupDiagnostics(context);await context.addInitScript(seed,{defaults:createDefaultProfileData()});
   const errors:string[]=[],csp:string[]=[];const observe=(page:Page)=>page.on('pageerror',error=>errors.push(error.message));observe(page);context.on('page',observe);
   await context.exposeBinding('deviceOptionsCsp',(_,value:string)=>csp.push(value));await context.addInitScript(()=>document.addEventListener('securitypolicyviolation',event=>{void(window as unknown as{deviceOptionsCsp(value:string):Promise<void>}).deviceOptionsCsp(event.violatedDirective);}));
-  const artifact=process.env.GETBASED_KIT_ARTIFACT||path.resolve('.local-notes/sveltekit-build');const url=await recommendationChunk(artifact);const server=await startKitServer(artifact);
+  const artifact=process.env.GETBASED_KIT_ARTIFACT||path.resolve('.local-notes/sveltekit-build');const url=await recommendationChunk(artifact);const server=await startKitServer(artifact,[lightDeviceCatalogRoute]);
   try {
     const loading=[{phase:'initial-online',readyMs:await ready(page,server.origin)}];await expect(page.locator('[data-light-device-options]')).toHaveCount(0);const before=await page.evaluate(readComparisonAcceptanceProfile);server.state.offline=true;
     await inspect(page,url,true);expect(await page.evaluate(readComparisonAcceptanceProfile)).toEqual(before);await page.close();

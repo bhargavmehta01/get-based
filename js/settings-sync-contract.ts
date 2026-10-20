@@ -5,6 +5,7 @@ export interface SyncSettingsSnapshot {
   configured: boolean;
   paused: boolean;
   relay: string;
+  selfServiceUrl: string;
   blocker: string | null;
   deletions: readonly SyncDeletionRow[];
 }

@@ -31,6 +31,52 @@ select a broader scope. A runtime module without selected test coverage blocks
 the plan; unrelated tests cannot compensate for missing relevant tests.
 The retained CI plan and job summary explain the selection.
 
+Runnable test entries terminate dependency selection; a test listed by a planner
+or source-audit tool is not an application input. Cached module URLs and the
+bootstrap HTML are packaging references, so an indirect feature edit does not
+pretend that the worker or HTML itself changed. Changed application modules
+still select their actual transitive behavior consumers and the app-shell graph
+and shipping-build contracts. Changes reaching application initialization also
+retain actual AppShell hydration acceptance in all four shipping browser projects. Unknown modules and untested Svelte owners fail
+closed even when unrelated packaging checks are selected.
+
+The planner may qualify a precache inventory diff as additive only against its
+actual Git base: the literal array must retain all existing entries in order,
+only known local JavaScript module URLs may be added, and code outside the array
+must be identical. It selects the added modules' behavior and exact graph checks.
+Missing baselines, removals, reordered entries, unknown/non-module URLs, executable
+array entries and worker changes retain complete offline lifecycle acceptance.
+
+CI compiles canonical TypeScript, Tailwind and Svelte outputs on the producer and
+runs all existing compiler, architecture, supply-chain and quality gates before
+sealing generated siblings in a compressed stream. Virtual component facade
+imports are checkout-independent so code and source maps remain reproducible.
+Consumers restore the same catalog, qualify the exact
+revision and authored-input inventory, and check every output body before reuse.
+The rebuilt HTML travels with the generated output. Its input identity excludes
+only the existing compiler-owned AppShell, early legal gate and two inline theme-style bodies;
+unique boundaries, boot ordering and every other document byte remain verified,
+as do all canonical component/style sources. Restoring a generated HTML payload
+also checks that its authored document bytes match before any output is written.
+Output writes qualify the same opened file descriptor before truncation and
+reject symbolic or hard links.
+The CI-only install mode verifies those hashes again inside npm prepare; absent,
+stale, changed or linked payloads fail instead of silently skipping compilation.
+Dependencies and their install scripts still run normally on each runner's OS.
+Normal local npm installs continue to compile, and the shipping artifact keeps
+its separate source/build-identity verification. No coverage or resource limit is
+reduced by compiler reuse.
+
+Positive Light device-library and device-options acceptance uses an explicit
+catalog response from [the test fixture](../tests/helpers/light-device-catalog-fixture.ts).
+Product availability can differ between the checked-in preview catalog and the
+catalog fetched for a main build. The fixture supplies one known product through
+the real HTTP server; the shipping bundles, catalog loader, affiliate policy,
+service-worker caching, profile equality and cold-launch assertions remain real.
+These positive journeys verify behavior for an available product, not membership
+of a changing external production catalog. Artifact catalog identity is still
+qualified separately before browser acceptance.
+
 PR tests do not ordinarily collect whole-project coverage. Main-branch pushes,
 manual full test runs, and explicit release verification run the complete
 regression suite, critical coverage gates, and combined production measurement.
@@ -460,7 +506,16 @@ exercise public picker controls and session-draft restoration, offline mapping a
 clearing, nested cancellation focus, marker/fixed/biometric selection persistence
 and closed-client cold launches while preserving accepted health records.
 [Import review boundary checks](../tests/pdf-import-review-boundaries.test.ts) also
-cover repeated opens and independent parent, child and concurrent modal scroll locks.
+cover repeated opens and independent parent, child and concurrent modal scroll locks. Import validation reports original row numbers even when rows are grouped,
+reveals every affected row across filters, and clears invalid state when a row is
+corrected or excluded. Blank saved custom-marker units adopt the incoming unit;
+incompatible established units still block the commit.
+[Page-wide import checks](../tests/import-page-drop.test.ts) and
+[populated Dashboard acceptance](../tests/playwright/import-page-drop.spec.ts)
+cover file-only dragging, specialized target ownership, busy/profile guards and
+cancellation before processing. Page drops show detected type counts; DNA and
+mixed selections require confirmation, and unrecognized text/CSV requires an
+explicit lab-report classification before it can enter an AI import pipeline.
 These focused checks do not establish physical touch behavior, installed-PWA/update
 acceptance or complete application acceptance.
 
@@ -758,7 +813,15 @@ feed the unchanged combined-coverage collector. Four SvelteKit projects use up t
 two file shards each, with complete selected-case identity and finite capability
 skip checks at the final gate. Partial coverage inputs or missing selected jobs
 fail the gate. PR runs cancel superseded scoped runs; full release evidence stays
-separate. The required merge-check context remains `test`.
+separate. The required merge-check context remains `test`. Immutable Kit receipt artifacts keep each GitHub run attempt
+in a separate directory. A failed-job rerun may reuse successful receipts from the
+same source revision and workflow run, bounded between the collection and current
+gate attempts. Only the newest receipt for an identical declared shard replaces
+its predecessor; a failed newest receipt never falls back to an older pass.
+Every selected case must still appear exactly once, with one native test attempt,
+unchanged declarations and only the existing finite capability skips. Different
+revisions/runs, future attempts, ambiguous receipts and overlapping shards fail
+qualification.
 
 Use focused local unit, collection and headless browser checks when changing this
 orchestration. These checks validate the workflow contracts; only a real GitHub

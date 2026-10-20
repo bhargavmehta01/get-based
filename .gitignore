@@ -3642,3 +3642,24 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 /tests/helpers/wearable-manual-sync-expectations.js.map
 /tests/wearable-manual-sync-expectations.test.js
 /tests/wearable-manual-sync-expectations.test.js.map
+# Community import workflow canonical TypeScript output
+/js/import-dispatch.js
+/js/import-drop-zone-events.js
+/js/import-page-drop.js
+/js/import-page-drop-view.js
+/js/import-selection-confirmation.js
+/js/import-stylesheet.js
+
+/js/sync-relay-self-service.js
+
+# Verified CI compiler-output transport
+/scripts/ci-compiled.mjs
+/scripts/ci-compiled.mjs.map
+/scripts/prepare.mjs
+/scripts/prepare.mjs.map
+/tests/ci-compiled.test.js
+/tests/ci-compiled.test.js.map
+
+# Explicit external catalog input for Light acceptance
+/tests/helpers/light-device-catalog-fixture.js
+/tests/helpers/light-device-catalog-fixture.js.map

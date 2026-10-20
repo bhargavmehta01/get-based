@@ -5,6 +5,7 @@
   let { initial }: { initial: SyncSettingsSnapshot } = $props();
   let snapshot = $state(untrack(() => initial));
   let relayValue = $state(untrack(() => initial.relay));
+  let selfServiceValue = $state(untrack(() => initial.selfServiceUrl));
   let connected: boolean | null = $state(null);
   let identityCode: string | null = $state(null);
   let identityUnavailable = $state(false);
@@ -16,6 +17,7 @@
   export function clearSecrets(): void { revealedMnemonic = ''; }
   export function refresh(next: SyncSettingsSnapshot): void {
     if (next.relay !== snapshot.relay) relayValue = next.relay;
+    if (next.selfServiceUrl !== snapshot.selfServiceUrl) selfServiceValue = next.selfServiceUrl;
     snapshot = next; clearSecrets();
     connected = null; identityCode = null; identityUnavailable = false;
     mnemonicReady = false; mnemonicMessage = 'Loading...'; mnemonicWarning = false;
@@ -103,6 +105,12 @@
           <input type="text" id="sync-relay-input" class={SYNC_INPUT} placeholder="wss://..." bind:value={relayValue}>
           <button type="button" class={SYNC_RELAY_SAVE} data-sync-action="save-relay">Save</button>
         </div>
+        <label for="sync-self-service-input" class="gb:sync:text-[12px] gb:sync:text-secondary gb:sync:block gb:sync:mt-2 gb:sync:mb-1">Self-service URL (optional)</label>
+        <div class="gb:sync:flex gb:sync:gap-2">
+          <input type="url" id="sync-self-service-input" class={SYNC_INPUT} placeholder="Automatic from relay server" aria-describedby="sync-self-service-help" bind:value={selfServiceValue}>
+          <button type="button" class={SYNC_RELAY_SAVE} data-sync-action="save-self-service" aria-label="Save self-service URL">Save</button>
+        </div>
+        <div id="sync-self-service-help" class={SYNC_HELP}>For storage refresh and Reduce storage on this device. Leave blank for automatic routing. Use the HTTP(S) base URL your relay operator provides; the WebSocket sync address stays separate.</div>
         <button type="button" class={`${SYNC_DISCONNECT} gb:sync:w-full gb:sync:mt-2`} data-sync-action="disconnect-sync">Disconnect &amp; reset sync on this device</button>
         <div class={SYNC_HELP}>Disconnecting forgets this device’s sync identity and local sync history. Your profile data and relay data are not deleted.</div>
       </div>
