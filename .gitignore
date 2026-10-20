@@ -3642,3 +3642,17 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 /js/import-page-drop-view.js
 /js/import-selection-confirmation.js
 /js/import-stylesheet.js
+
+/js/sync-relay-self-service.js
+
+# Verified CI compiler-output transport
+/scripts/ci-compiled.mjs
+/scripts/ci-compiled.mjs.map
+/scripts/prepare.mjs
+/scripts/prepare.mjs.map
+/tests/ci-compiled.test.js
+/tests/ci-compiled.test.js.map
+
+# Explicit external catalog input for Light acceptance
+/tests/helpers/light-device-catalog-fixture.js
+/tests/helpers/light-device-catalog-fixture.js.map

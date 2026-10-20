@@ -9,8 +9,8 @@ The human-maintained architecture contract is in [`ARCHITECTURE.md`](ARCHITECTUR
 
 | Metric | Current |
 | --- | ---: |
-| Modules | 1855 |
-| Internal import edges | 5607 |
+| Modules | 1856 |
+| Internal import edges | 5610 |
 | Dynamic internal edges | 129 |
 | Modules participating in cycles | 0 |
 | Cyclic components | 0 |
@@ -4306,11 +4306,11 @@ Native browser modules shipped with the static application.
 - [`js/settings-sync-classes.ts`](js/settings-sync-classes.ts) → no in-scope imports
 - [`js/settings-sync-component.ts`](js/settings-sync-component.ts) → [`js/components/SyncSettings.svelte`](js/components/SyncSettings.svelte)
 - [`js/settings-sync-contract.ts`](js/settings-sync-contract.ts) → no in-scope imports
-- [`js/settings-sync-panel-impl.ts`](js/settings-sync-panel-impl.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/settings-agent-access-mutation.ts`](js/settings-agent-access-mutation.ts), [`js/settings-agent-access-panel.ts`](js/settings-agent-access-panel.ts), [`js/settings-runtime-bridge.ts`](js/settings-runtime-bridge.ts), [`js/settings-sync-component.ts`](js/settings-sync-component.ts), [`js/settings-sync-panel-render.ts`](js/settings-sync-panel-render.ts), [`js/settings-sync-restore-ui.ts`](js/settings-sync-restore-ui.ts), [`js/settings-sync-view.ts`](js/settings-sync-view.ts), [`js/sync.ts`](js/sync.ts), [`js/utils-runtime.ts`](js/utils-runtime.ts), [`js/utils.ts`](js/utils.ts)
+- [`js/settings-sync-panel-impl.ts`](js/settings-sync-panel-impl.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/settings-agent-access-mutation.ts`](js/settings-agent-access-mutation.ts), [`js/settings-agent-access-panel.ts`](js/settings-agent-access-panel.ts), [`js/settings-runtime-bridge.ts`](js/settings-runtime-bridge.ts), [`js/settings-sync-component.ts`](js/settings-sync-component.ts), [`js/settings-sync-panel-render.ts`](js/settings-sync-panel-render.ts), [`js/settings-sync-restore-ui.ts`](js/settings-sync-restore-ui.ts), [`js/settings-sync-view.ts`](js/settings-sync-view.ts), [`js/sync-relay-self-service.ts`](js/sync-relay-self-service.ts), [`js/sync.ts`](js/sync.ts), [`js/utils-runtime.ts`](js/utils-runtime.ts), [`js/utils.ts`](js/utils.ts)
 - [`js/settings-sync-panel-render.ts`](js/settings-sync-panel-render.ts) → no in-scope imports
 - [`js/settings-sync-panel.ts`](js/settings-sync-panel.ts) → [`js/retrying-module-loader.ts`](js/retrying-module-loader.ts), [`js/settings-sync-panel-impl.ts`](js/settings-sync-panel-impl.ts) *(dynamic)*, [`js/sync.ts`](js/sync.ts), [`js/utils.ts`](js/utils.ts)
 - [`js/settings-sync-restore-ui.ts`](js/settings-sync-restore-ui.ts) → [`js/sync-dialog-component.ts`](js/sync-dialog-component.ts), [`js/sync-dialog-controller.ts`](js/sync-dialog-controller.ts), [`js/sync.ts`](js/sync.ts), [`js/utils.ts`](js/utils.ts)
-- [`js/settings-sync-view.ts`](js/settings-sync-view.ts) → [`js/sync.ts`](js/sync.ts)
+- [`js/settings-sync-view.ts`](js/settings-sync-view.ts) → [`js/sync-relay-self-service.ts`](js/sync-relay-self-service.ts), [`js/sync.ts`](js/sync.ts)
 - [`js/settings-tweaks.ts`](js/settings-tweaks.ts) → [`js/charts.ts`](js/charts.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/settings-event-target.ts`](js/settings-event-target.ts), [`js/settings-runtime.ts`](js/settings-runtime.ts), [`js/theme.ts`](js/theme.ts), [`js/tweaks-presentation.ts`](js/tweaks-presentation.ts), [`js/tweaks-rendering.ts`](js/tweaks-rendering.ts)
 - [`js/settings-voice-classes.ts`](js/settings-voice-classes.ts) → no in-scope imports
 - [`js/settings-voice-component.ts`](js/settings-voice-component.ts) → [`js/components/VoiceSettings.svelte`](js/components/VoiceSettings.svelte), [`js/settings-voice-view-runtime.ts`](js/settings-voice-view-runtime.ts), [`js/settings-voice-view.ts`](js/settings-voice-view.ts)
@@ -4613,7 +4613,7 @@ Native browser modules shipped with the static application.
 
 </details>
 
-<details><summary><code>sync</code> family — 87 modules</summary>
+<details><summary><code>sync</code> family — 88 modules</summary>
 
 - [`js/sync-actions.ts`](js/sync-actions.ts) → [`js/profile-sync-policy.ts`](js/profile-sync-policy.ts), [`js/state.ts`](js/state.ts), [`js/sync-cutover.ts`](js/sync-cutover.ts), [`js/sync-dirty-state.ts`](js/sync-dirty-state.ts), [`js/sync-messenger.ts`](js/sync-messenger.ts), [`js/sync-save-hooks.ts`](js/sync-save-hooks.ts), [`js/sync-state.ts`](js/sync-state.ts), [`js/sync-storage-cleanup.ts`](js/sync-storage-cleanup.ts), [`js/utils.ts`](js/utils.ts)
 - [`js/sync-apply.ts`](js/sync-apply.ts) → [`js/app-extension-runtime.ts`](js/app-extension-runtime.ts), [`js/crypto.ts`](js/crypto.ts), [`js/routstr-session.ts`](js/routstr-session.ts), [`js/routstr-validation.ts`](js/routstr-validation.ts), [`js/sync-chat-apply.ts`](js/sync-chat-apply.ts), [`js/sync-payload-collectors.ts`](js/sync-payload-collectors.ts), [`js/sync-runtime.ts`](js/sync-runtime.ts), [`js/voice-settings-schema.ts`](js/voice-settings-schema.ts)
@@ -4689,7 +4689,8 @@ Native browser modules shipped with the static application.
 - [`js/sync-push.ts`](js/sync-push.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/nutrition-sync-sanitize.ts`](js/nutrition-sync-sanitize.ts), [`js/profile-sync-policy.ts`](js/profile-sync-policy.ts), [`js/profile.ts`](js/profile.ts), [`js/sync-chat-merge.ts`](js/sync-chat-merge.ts) *(dynamic)*, [`js/sync-delta.ts`](js/sync-delta.ts), [`js/sync-dirty-state.ts`](js/sync-dirty-state.ts), [`js/sync-origin-state.ts`](js/sync-origin-state.ts), [`js/sync-payload.ts`](js/sync-payload.ts), [`js/sync-push-deltas.ts`](js/sync-push-deltas.ts), [`js/sync-relay-health.ts`](js/sync-relay-health.ts), [`js/sync-state.ts`](js/sync-state.ts)
 - [`js/sync-reconcile.ts`](js/sync-reconcile.ts) → [`js/data-merge.ts`](js/data-merge.ts), [`js/profile-sync-policy.ts`](js/profile-sync-policy.ts), [`js/state.ts`](js/state.ts), [`js/sync-chat-apply.ts`](js/sync-chat-apply.ts), [`js/sync-identity.ts`](js/sync-identity.ts), [`js/sync-payload-collectors.ts`](js/sync-payload-collectors.ts), [`js/sync-payload.ts`](js/sync-payload.ts), [`js/sync-state.ts`](js/sync-state.ts)
 - [`js/sync-recovery.ts`](js/sync-recovery.ts) → no in-scope imports
-- [`js/sync-relay-health.ts`](js/sync-relay-health.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts)
+- [`js/sync-relay-health.ts`](js/sync-relay-health.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/sync-relay-self-service.ts`](js/sync-relay-self-service.ts)
+- [`js/sync-relay-self-service.ts`](js/sync-relay-self-service.ts) → no in-scope imports
 - [`js/sync-runtime.ts`](js/sync-runtime.ts) → [`js/chat-runtime.ts`](js/chat-runtime.ts), [`js/provider-wallet-panels.ts`](js/provider-wallet-panels.ts) *(dynamic)*
 - [`js/sync-save-hooks-core.ts`](js/sync-save-hooks-core.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/profile-storage-key.ts`](js/profile-storage-key.ts), [`js/profile-sync-policy.ts`](js/profile-sync-policy.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/state.ts`](js/state.ts), [`js/sync-dirty-state.ts`](js/sync-dirty-state.ts), [`js/utils-runtime.ts`](js/utils-runtime.ts)
 - [`js/sync-save-hooks.ts`](js/sync-save-hooks.ts) → [`js/caught-error.ts`](js/caught-error.ts), [`js/crypto.ts`](js/crypto.ts), [`js/profile-storage-key.ts`](js/profile-storage-key.ts), [`js/profile-sync-policy.ts`](js/profile-sync-policy.ts), [`js/state.ts`](js/state.ts), [`js/sync-chat-apply.ts`](js/sync-chat-apply.ts), [`js/sync-dirty-state.ts`](js/sync-dirty-state.ts), [`js/sync-messenger.ts`](js/sync-messenger.ts), [`js/sync-save-hooks-core.ts`](js/sync-save-hooks-core.ts), [`js/utils-runtime.ts`](js/utils-runtime.ts)

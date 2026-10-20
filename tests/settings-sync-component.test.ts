@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { disposeSyncSettings, mountSyncSettings, getSyncSettingsView } from '../js/settings-sync-component.js';
 import type { SyncSettingsSnapshot } from '../js/settings-sync-contract.js';
-const initial: SyncSettingsSnapshot = { enabled: false, configured: false, paused: false, relay: 'wss://synthetic.example', blocker: null, deletions: [] };
+const initial: SyncSettingsSnapshot = { enabled: false, configured: false, paused: false, relay: 'wss://synthetic.example', selfServiceUrl: '', blocker: null, deletions: [] };
 beforeEach(() => { document.body.innerHTML = '<section id="sync-section"><div data-sync-settings-root></div></section>'; });
 afterEach(() => { disposeSyncSettings(); document.body.replaceChildren(); });
 function mounted(patch: Partial<SyncSettingsSnapshot> = {}) { return mountSyncSettings(document.querySelector('[data-sync-settings-root]')!, { ...initial, ...patch }); }
@@ -58,4 +58,14 @@ it('rejects late updates to a removed or replaced owner and releases secrets on 
   expect(old.isCurrent()).toBe(false); expect(next.isCurrent()).toBe(true);
   expect(document.body.innerHTML).not.toContain('STALE'); expect(document.body.innerHTML).not.toContain('Old synthetic secret');
   disposeSyncSettings(); expect(getSyncSettingsView()).toBeNull(); expect(document.querySelector('[data-sync-settings-view]')).toBeNull();
+});
+
+it('retains an unsaved self-service URL while status refreshes arrive and adopts saved configuration changes', () => {
+  const view = mounted({enabled: true});
+  const input = document.querySelector<HTMLInputElement>('#sync-self-service-input')!;
+  input.value = 'https://edited.example:4443'; input.dispatchEvent(new Event('input', {bubbles: true})); input.focus();
+  view.refresh({...initial, enabled: true});
+  expect(document.activeElement).toBe(input); expect(input.value).toBe('https://edited.example:4443');
+  view.refresh({...initial, enabled: true, selfServiceUrl: 'https://saved.example'});
+  expect(input.value).toBe('https://saved.example');
 });
