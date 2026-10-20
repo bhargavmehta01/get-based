@@ -170,3 +170,12 @@ it.each(['edit', 'delete-all'])('keeps a concurrent %s that commits after the le
     expect(await getDaily(profile, 'manual', date)).toBeNull();
   }
 });
+
+it('does not backfill private context after deletion intent commits but before the raw row purge', async () => {
+  await upsertDaily(profile, {source: 'manual', date, weight: 80, note: 'Private deleted context', tags: ['resting']});
+  state.importedData.manualMetricTombstones = {'weight.all': Date.now()}; await saveImportedData();
+  await catchUpManualBodyReadings(profile);
+  expect(state.importedData.manualBodyReadings?.[key('weight')]).toBeUndefined();
+  expect(state.importedData.manualBodyReadings?.[key('note')]).toBeUndefined();
+  expect(state.importedData.manualBodyReadings?.[key('tags')]).toBeUndefined();
+});

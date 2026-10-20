@@ -85,12 +85,17 @@ export async function catchUpManualBodyReadings(profileId: string, attempt = 0):
     const rows = await getDailyRange(profileId, 'manual', MANUAL_HISTORY_START, MANUAL_HISTORY_END);
     if (!current()) return {skipped: 'obsolete' as const};
     const mirror = manualMirror(imported);
-    for (const row of rows) for (const field of MANUAL_MIRROR_FIELDS) {
-      if (row[field] == null || Object.hasOwn(mirror, manualMirrorKey(field, row.date))
-          || (MANUAL_METRICS.includes(field) && isManualMetricTombstoned(field, row.date, imported))) continue;
-      const key = manualMirrorKey(field, row.date);
-      mirrorManualPatch(imported, row.date, {[field]: row[field]}, 0);
-      if (Object.hasOwn(mirror, key)) added++;
+    for (const row of rows) {
+      // A peer may have committed deletion intent before its row purge finishes.
+      // Date-level context belongs only to a surviving manual measurement.
+      if (!MANUAL_METRICS.some(field => row[field] != null && !isManualMetricTombstoned(field, row.date, imported))) continue;
+      for (const field of MANUAL_MIRROR_FIELDS) {
+        if (row[field] == null || Object.hasOwn(mirror, manualMirrorKey(field, row.date))
+            || (MANUAL_METRICS.includes(field) && isManualMetricTombstoned(field, row.date, imported))) continue;
+        const key = manualMirrorKey(field, row.date);
+        mirrorManualPatch(imported, row.date, {[field]: row[field]}, 0);
+        if (Object.hasOwn(mirror, key)) added++;
+      }
     }
     // A locked read may be empty. Retry later rather than recording a false successful upgrade.
     markBackfilled = rows.length > 0;
