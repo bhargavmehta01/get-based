@@ -9,9 +9,9 @@ The human-maintained architecture contract is in [`ARCHITECTURE.md`](ARCHITECTUR
 
 | Metric | Current |
 | --- | ---: |
-| Modules | 1849 |
-| Internal import edges | 5596 |
-| Dynamic internal edges | 128 |
+| Modules | 1856 |
+| Internal import edges | 5610 |
+| Dynamic internal edges | 129 |
 | Modules participating in cycles | 0 |
 | Cyclic components | 0 |
 | Largest cyclic component | 0 |
@@ -65,14 +65,14 @@ High fan-in modules have many dependants; high fan-out modules coordinate many d
 
 | High fan-in | Dependants | High fan-out | Imports |
 | --- | ---: | --- | ---: |
-| [`js/state.ts`](js/state.ts) | 258 | [`js/app-shell-hooks.ts`](js/app-shell-hooks.ts) | 78 |
-| [`js/utils.ts`](js/utils.ts) | 256 | [`js/chat-send.ts`](js/chat-send.ts) | 38 |
+| [`js/state.ts`](js/state.ts) | 257 | [`js/app-shell-hooks.ts`](js/app-shell-hooks.ts) | 78 |
+| [`js/utils.ts`](js/utils.ts) | 257 | [`js/chat-send.ts`](js/chat-send.ts) | 38 |
 | [`js/caught-error.ts`](js/caught-error.ts) | 93 | [`js/app-light-sun-modules.ts`](js/app-light-sun-modules.ts) | 36 |
 | [`js/data.ts`](js/data.ts) | 87 | [`js/provider-panels.ts`](js/provider-panels.ts) | 34 |
 | [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts) | 84 | [`js/settings.ts`](js/settings.ts) | 34 |
-| [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts) | 65 | [`js/provider-wallet-panels.ts`](js/provider-wallet-panels.ts) | 30 |
-| [`js/api.ts`](js/api.ts) | 52 | [`js/sync-configure.ts`](js/sync-configure.ts) | 29 |
-| [`js/profile.ts`](js/profile.ts) | 51 | [`js/pdf-import.ts`](js/pdf-import.ts) | 28 |
+| [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts) | 65 | [`js/pdf-import.ts`](js/pdf-import.ts) | 31 |
+| [`js/api.ts`](js/api.ts) | 52 | [`js/provider-wallet-panels.ts`](js/provider-wallet-panels.ts) | 30 |
+| [`js/profile.ts`](js/profile.ts) | 51 | [`js/sync-configure.ts`](js/sync-configure.ts) | 29 |
 | [`js/schema.ts`](js/schema.ts) | 41 | [`js/wearables-connect.ts`](js/wearables-connect.ts) | 28 |
 | [`js/crypto.ts`](js/crypto.ts) | 40 | [`js/chat-empty-state.ts`](js/chat-empty-state.ts) | 26 |
 | [`js/ai-feature-routing.ts`](js/ai-feature-routing.ts) | 39 | [`js/views-runtime.ts`](js/views-runtime.ts) | 26 |
@@ -2296,7 +2296,7 @@ Native browser modules shipped with the static application.
 
 </details>
 
-<details><summary><code>import</code> family — 25 modules</summary>
+<details><summary><code>import</code> family — 31 modules</summary>
 
 - [`js/import-benchmark-classes.ts`](js/import-benchmark-classes.ts) → no in-scope imports
 - [`js/import-benchmark-component.ts`](js/import-benchmark-component.ts) → [`js/components/ImportBenchmarkEntry.svelte`](js/components/ImportBenchmarkEntry.svelte), [`js/components/ImportBenchmarks.svelte`](js/components/ImportBenchmarks.svelte)
@@ -2308,13 +2308,17 @@ Native browser modules shipped with the static application.
 - [`js/import-benchmark-run.ts`](js/import-benchmark-run.ts) → no in-scope imports
 - [`js/import-benchmarks.ts`](js/import-benchmarks.ts) → [`js/api.ts`](js/api.ts), [`js/data.ts`](js/data.ts), [`js/local-ai-discovery.ts`](js/local-ai-discovery.ts), [`js/state.ts`](js/state.ts), [`js/unique-id.ts`](js/unique-id.ts)
 - [`js/import-commit-validation.ts`](js/import-commit-validation.ts) → [`js/lab-entry.ts`](js/lab-entry.ts), [`js/pdf-import-unit-conversions.ts`](js/pdf-import-unit-conversions.ts), [`js/schema.ts`](js/schema.ts)
+- [`js/import-dispatch.ts`](js/import-dispatch.ts) → [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/state.ts`](js/state.ts)
+- [`js/import-drop-zone-events.ts`](js/import-drop-zone-events.ts) → [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-page-drop.ts`](js/import-page-drop.ts)
 - [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts) → [`js/dna-runtime-bridge.ts`](js/dna-runtime-bridge.ts), [`js/export-loader.ts`](js/export-loader.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/utils.ts`](js/utils.ts)
-- [`js/import-drop-zone.ts`](js/import-drop-zone.ts) → [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-loader.ts`](js/import-loader.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/state.ts`](js/state.ts)
-- [`js/import-file-input.ts`](js/import-file-input.ts) → [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-loader.ts`](js/import-loader.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/state.ts`](js/state.ts)
-- [`js/import-loader.ts`](js/import-loader.ts) → [`js/health-data-loader.ts`](js/health-data-loader.ts), [`js/import-review-draft.ts`](js/import-review-draft.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/pdf-import-review.ts`](js/pdf-import-review.ts) *(dynamic)*, [`js/pdf-import.ts`](js/pdf-import.ts) *(dynamic)*
+- [`js/import-drop-zone.ts`](js/import-drop-zone.ts) → [`js/import-dispatch.ts`](js/import-dispatch.ts), [`js/import-drop-zone-events.ts`](js/import-drop-zone-events.ts), [`js/import-loader.ts`](js/import-loader.ts)
+- [`js/import-file-input.ts`](js/import-file-input.ts) → [`js/import-dispatch.ts`](js/import-dispatch.ts), [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-loader.ts`](js/import-loader.ts), [`js/import-page-drop.ts`](js/import-page-drop.ts)
+- [`js/import-loader.ts`](js/import-loader.ts) → [`js/health-data-loader.ts`](js/health-data-loader.ts), [`js/import-review-draft.ts`](js/import-review-draft.ts), [`js/import-stylesheet.ts`](js/import-stylesheet.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/pdf-import-review.ts`](js/pdf-import-review.ts) *(dynamic)*, [`js/pdf-import.ts`](js/pdf-import.ts) *(dynamic)*
 - [`js/import-marker-map-classes.ts`](js/import-marker-map-classes.ts) → no in-scope imports
 - [`js/import-marker-map-modal.ts`](js/import-marker-map-modal.ts) → [`js/adapters.ts`](js/adapters.ts), [`js/components/ImportMarkerMapCategories.svelte`](js/components/ImportMarkerMapCategories.svelte), [`js/components/ImportMarkerMapPresentation.svelte`](js/components/ImportMarkerMapPresentation.svelte), [`js/components/ImportMarkerMapResults.svelte`](js/components/ImportMarkerMapResults.svelte), [`js/import-marker-map-classes.ts`](js/import-marker-map-classes.ts), [`js/import-marker-map-presentation.ts`](js/import-marker-map-presentation.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/pdf-import-marker-mapping.ts`](js/pdf-import-marker-mapping.ts), [`js/schema.ts`](js/schema.ts)
 - [`js/import-marker-map-presentation.ts`](js/import-marker-map-presentation.ts) → no in-scope imports
+- [`js/import-page-drop-view.ts`](js/import-page-drop-view.ts) → [`js/components/ImportPageDrop.svelte`](js/components/ImportPageDrop.svelte), [`js/import-stylesheet.ts`](js/import-stylesheet.ts)
+- [`js/import-page-drop.ts`](js/import-page-drop.ts) → [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-page-drop-view.ts`](js/import-page-drop-view.ts) *(dynamic)*
 - [`js/import-progress-classes.ts`](js/import-progress-classes.ts) → no in-scope imports
 - [`js/import-progress-presentation.ts`](js/import-progress-presentation.ts) → [`js/constants.ts`](js/constants.ts)
 - [`js/import-progress-rendering.ts`](js/import-progress-rendering.ts) → [`js/components/DropZoneResetPresentation.svelte`](js/components/DropZoneResetPresentation.svelte), [`js/components/ImportProgressPresentation.svelte`](js/components/ImportProgressPresentation.svelte), [`js/import-progress-presentation.ts`](js/import-progress-presentation.ts)
@@ -2323,6 +2327,8 @@ Native browser modules shipped with the static application.
 - [`js/import-review-draft.ts`](js/import-review-draft.ts) → no in-scope imports
 - [`js/import-review-presentation.ts`](js/import-review-presentation.ts) → no in-scope imports
 - [`js/import-review-row-actions.ts`](js/import-review-row-actions.ts) → [`js/components/ImportExcludeContent.svelte`](js/components/ImportExcludeContent.svelte), [`js/components/ImportMapControl.svelte`](js/components/ImportMapControl.svelte), [`js/components/ImportReviewRowAction.svelte`](js/components/ImportReviewRowAction.svelte), [`js/import-review-presentation.ts`](js/import-review-presentation.ts)
+- [`js/import-selection-confirmation.ts`](js/import-selection-confirmation.ts) → [`js/utils.ts`](js/utils.ts)
+- [`js/import-stylesheet.ts`](js/import-stylesheet.ts) → no in-scope imports
 
 </details>
 
@@ -2365,6 +2371,12 @@ Native browser modules shipped with the static application.
 <details><summary><code>ImportMarkerMapResults.svelte</code> family — 1 module</summary>
 
 - [`js/components/ImportMarkerMapResults.svelte`](js/components/ImportMarkerMapResults.svelte) → [`js/import-marker-map-classes.ts`](js/import-marker-map-classes.ts)
+
+</details>
+
+<details><summary><code>ImportPageDrop.svelte</code> family — 1 module</summary>
+
+- [`js/components/ImportPageDrop.svelte`](js/components/ImportPageDrop.svelte) → no in-scope imports
 
 </details>
 
@@ -3898,10 +3910,10 @@ Native browser modules shipped with the static application.
 - [`js/pdf-import-ratio-units.ts`](js/pdf-import-ratio-units.ts) → no in-scope imports
 - [`js/pdf-import-review-formatting.ts`](js/pdf-import-review-formatting.ts) → [`js/components/ImportUnitControl.svelte`](js/components/ImportUnitControl.svelte), [`js/import-review-presentation.ts`](js/import-review-presentation.ts), [`js/pdf-import-unit-conversions.ts`](js/pdf-import-unit-conversions.ts)
 - [`js/pdf-import-review-runtime.ts`](js/pdf-import-review-runtime.ts) → [`js/data.ts`](js/data.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts)
-- [`js/pdf-import-review.ts`](js/pdf-import-review.ts) → [`js/api.ts`](js/api.ts), [`js/app-extension-runtime.ts`](js/app-extension-runtime.ts), [`js/components/ImportReviewPresentation.svelte`](js/components/ImportReviewPresentation.svelte), [`js/components/ImportReviewRowAction.svelte`](js/components/ImportReviewRowAction.svelte), [`js/components/ImportReviewStatus.svelte`](js/components/ImportReviewStatus.svelte), [`js/components/ImportUnitMenu.svelte`](js/components/ImportUnitMenu.svelte), [`js/import-benchmarks.ts`](js/import-benchmarks.ts), [`js/import-marker-map-modal.ts`](js/import-marker-map-modal.ts), [`js/import-review-classes.ts`](js/import-review-classes.ts), [`js/import-review-draft.ts`](js/import-review-draft.ts), [`js/import-review-presentation.ts`](js/import-review-presentation.ts), [`js/import-review-row-actions.ts`](js/import-review-row-actions.ts), [`js/lab-entry.ts`](js/lab-entry.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/pdf-import-marker-mapping.ts`](js/pdf-import-marker-mapping.ts), [`js/pdf-import-review-formatting.ts`](js/pdf-import-review-formatting.ts), [`js/pdf-import-review-runtime.ts`](js/pdf-import-review-runtime.ts), [`js/schema.ts`](js/schema.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts)
+- [`js/pdf-import-review.ts`](js/pdf-import-review.ts) → [`js/api.ts`](js/api.ts), [`js/app-extension-runtime.ts`](js/app-extension-runtime.ts), [`js/components/ImportReviewPresentation.svelte`](js/components/ImportReviewPresentation.svelte), [`js/components/ImportReviewRowAction.svelte`](js/components/ImportReviewRowAction.svelte), [`js/components/ImportReviewStatus.svelte`](js/components/ImportReviewStatus.svelte), [`js/components/ImportUnitMenu.svelte`](js/components/ImportUnitMenu.svelte), [`js/import-benchmarks.ts`](js/import-benchmarks.ts), [`js/import-commit-validation.ts`](js/import-commit-validation.ts), [`js/import-marker-map-modal.ts`](js/import-marker-map-modal.ts), [`js/import-review-classes.ts`](js/import-review-classes.ts), [`js/import-review-draft.ts`](js/import-review-draft.ts), [`js/import-review-presentation.ts`](js/import-review-presentation.ts), [`js/import-review-row-actions.ts`](js/import-review-row-actions.ts), [`js/lab-entry.ts`](js/lab-entry.ts), [`js/modal-lifecycle.ts`](js/modal-lifecycle.ts), [`js/pdf-import-marker-mapping.ts`](js/pdf-import-marker-mapping.ts), [`js/pdf-import-review-formatting.ts`](js/pdf-import-review-formatting.ts), [`js/pdf-import-review-runtime.ts`](js/pdf-import-review-runtime.ts), [`js/schema.ts`](js/schema.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts)
 - [`js/pdf-import-spreadsheet.ts`](js/pdf-import-spreadsheet.ts) → no in-scope imports
 - [`js/pdf-import-unit-conversions.ts`](js/pdf-import-unit-conversions.ts) → [`js/schema.ts`](js/schema.ts), [`js/secondary-unit-conversions.ts`](js/secondary-unit-conversions.ts)
-- [`js/pdf-import.ts`](js/pdf-import.ts) → [`js/ai-action-dialog-component.ts`](js/ai-action-dialog-component.ts), [`js/ai-feature-routing.ts`](js/ai-feature-routing.ts), [`js/api.ts`](js/api.ts), [`js/caught-error.ts`](js/caught-error.ts), [`js/crypto.ts`](js/crypto.ts), [`js/cycle-import.ts`](js/cycle-import.ts), [`js/dna-runtime-bridge.ts`](js/dna-runtime-bridge.ts), [`js/export.ts`](js/export.ts), [`js/import-benchmarks.ts`](js/import-benchmarks.ts), [`js/pdf-import-ai-utils.ts`](js/pdf-import-ai-utils.ts), [`js/pdf-import-commit.ts`](js/pdf-import-commit.ts), [`js/pdf-import-file-handlers.ts`](js/pdf-import-file-handlers.ts), [`js/pdf-import-file-utils.ts`](js/pdf-import-file-utils.ts), [`js/pdf-import-marker-mapping.ts`](js/pdf-import-marker-mapping.ts), [`js/pdf-import-marker-normalization.ts`](js/pdf-import-marker-normalization.ts), [`js/pdf-import-persistence.ts`](js/pdf-import-persistence.ts), [`js/pdf-import-preflight.ts`](js/pdf-import-preflight.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/pdf-import-review.ts`](js/pdf-import-review.ts), [`js/pdf-import-spreadsheet.ts`](js/pdf-import-spreadsheet.ts), [`js/pii.ts`](js/pii.ts), [`js/privacy-safe-diagnostics.ts`](js/privacy-safe-diagnostics.ts), [`js/profile.ts`](js/profile.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/schema.ts`](js/schema.ts), [`js/settings-runtime-bridge.ts`](js/settings-runtime-bridge.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts)
+- [`js/pdf-import.ts`](js/pdf-import.ts) → [`js/ai-action-dialog-component.ts`](js/ai-action-dialog-component.ts), [`js/ai-feature-routing.ts`](js/ai-feature-routing.ts), [`js/api.ts`](js/api.ts), [`js/caught-error.ts`](js/caught-error.ts), [`js/crypto.ts`](js/crypto.ts), [`js/cycle-import.ts`](js/cycle-import.ts), [`js/dna-runtime-bridge.ts`](js/dna-runtime-bridge.ts), [`js/export.ts`](js/export.ts), [`js/import-benchmarks.ts`](js/import-benchmarks.ts), [`js/import-dispatch.ts`](js/import-dispatch.ts), [`js/import-drop-zone-events.ts`](js/import-drop-zone-events.ts), [`js/import-selection-confirmation.ts`](js/import-selection-confirmation.ts), [`js/pdf-import-ai-utils.ts`](js/pdf-import-ai-utils.ts), [`js/pdf-import-commit.ts`](js/pdf-import-commit.ts), [`js/pdf-import-file-handlers.ts`](js/pdf-import-file-handlers.ts), [`js/pdf-import-file-utils.ts`](js/pdf-import-file-utils.ts), [`js/pdf-import-marker-mapping.ts`](js/pdf-import-marker-mapping.ts), [`js/pdf-import-marker-normalization.ts`](js/pdf-import-marker-normalization.ts), [`js/pdf-import-persistence.ts`](js/pdf-import-persistence.ts), [`js/pdf-import-preflight.ts`](js/pdf-import-preflight.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/pdf-import-review.ts`](js/pdf-import-review.ts), [`js/pdf-import-spreadsheet.ts`](js/pdf-import-spreadsheet.ts), [`js/pii.ts`](js/pii.ts), [`js/privacy-safe-diagnostics.ts`](js/privacy-safe-diagnostics.ts), [`js/profile.ts`](js/profile.ts), [`js/runtime-callbacks.ts`](js/runtime-callbacks.ts), [`js/schema.ts`](js/schema.ts), [`js/settings-runtime-bridge.ts`](js/settings-runtime-bridge.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts)
 - [`js/pdf-preflight-classes.ts`](js/pdf-preflight-classes.ts) → no in-scope imports
 - [`js/pdf-preflight-presentation.ts`](js/pdf-preflight-presentation.ts) → no in-scope imports
 - [`js/pdf-preflight-rendering.ts`](js/pdf-preflight-rendering.ts) → [`js/components/PdfImageModePresentation.svelte`](js/components/PdfImageModePresentation.svelte), [`js/components/PdfPreflightPresentation.svelte`](js/components/PdfPreflightPresentation.svelte)

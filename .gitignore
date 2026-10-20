@@ -3635,6 +3635,14 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 /tests/helpers/native-tab-key.js
 /tests/helpers/native-tab-key.js.map
 
+# Community import workflow canonical TypeScript output
+/js/import-dispatch.js
+/js/import-drop-zone-events.js
+/js/import-page-drop.js
+/js/import-page-drop-view.js
+/js/import-selection-confirmation.js
+/js/import-stylesheet.js
+
 /js/sync-relay-self-service.js
 
 # Verified CI compiler-output transport

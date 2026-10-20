@@ -506,7 +506,16 @@ exercise public picker controls and session-draft restoration, offline mapping a
 clearing, nested cancellation focus, marker/fixed/biometric selection persistence
 and closed-client cold launches while preserving accepted health records.
 [Import review boundary checks](../tests/pdf-import-review-boundaries.test.ts) also
-cover repeated opens and independent parent, child and concurrent modal scroll locks.
+cover repeated opens and independent parent, child and concurrent modal scroll locks. Import validation reports original row numbers even when rows are grouped,
+reveals every affected row across filters, and clears invalid state when a row is
+corrected or excluded. Blank saved custom-marker units adopt the incoming unit;
+incompatible established units still block the commit.
+[Page-wide import checks](../tests/import-page-drop.test.ts) and
+[populated Dashboard acceptance](../tests/playwright/import-page-drop.spec.ts)
+cover file-only dragging, specialized target ownership, busy/profile guards and
+cancellation before processing. Page drops show detected type counts; DNA and
+mixed selections require confirmation, and unrecognized text/CSV requires an
+explicit lab-report classification before it can enter an AI import pipeline.
 These focused checks do not establish physical touch behavior, installed-PWA/update
 acceptance or complete application acceptance.
 
@@ -803,7 +812,15 @@ feed the unchanged combined-coverage collector. Four SvelteKit projects use up t
 two file shards each, with complete selected-case identity and finite capability
 skip checks at the final gate. Partial coverage inputs or missing selected jobs
 fail the gate. PR runs cancel superseded scoped runs; full release evidence stays
-separate. The required merge-check context remains `test`.
+separate. The required merge-check context remains `test`. Immutable Kit receipt artifacts keep each GitHub run attempt
+in a separate directory. A failed-job rerun may reuse successful receipts from the
+same source revision and workflow run, bounded between the collection and current
+gate attempts. Only the newest receipt for an identical declared shard replaces
+its predecessor; a failed newest receipt never falls back to an older pass.
+Every selected case must still appear exactly once, with one native test attempt,
+unchanged declarations and only the existing finite capability skips. Different
+revisions/runs, future attempts, ambiguous receipts and overlapping shards fail
+qualification.
 
 Use focused local unit, collection and headless browser checks when changing this
 orchestration. These checks validate the workflow contracts; only a real GitHub
