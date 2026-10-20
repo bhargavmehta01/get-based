@@ -1,3 +1,4 @@
+import { getRelaySelfServiceUrl, resolveRelaySelfServiceUrl } from './sync-relay-self-service.js';
 import { configureRuntimeDependencies, type RuntimeDependencyUpdates } from './runtime-callbacks.js';
 
 export interface SyncAppOwner { id?: string | number; writeKey?: BufferSource; }
@@ -103,30 +104,8 @@ function _coerceRelayBytes(bytes: unknown) {
 // Mirrors the /self/* endpoints introduced in getbased-relay 1.2.0.
 // Each request is HMAC-SHA256 signed with the user's own writeKey
 // (the same Evolu secret the client already holds for pushes).
-const SELF_URL_OVERRIDE_KEY = 'labcharts-self-url';
-
 function _getSelfBaseUrl() {
-  try {
-    const override = localStorage.getItem(SELF_URL_OVERRIDE_KEY);
-    if (override && /^https?:\/\//i.test(override)) {
-      return override.replace(/\/+$/, '');
-    }
-  } catch {}
-  const wss = (0, relayHealthDependencies.getSyncRelay)();
-  if (typeof wss !== 'string' || !wss) return null;
-  try {
-    const u = new URL(wss);
-    if (u.protocol === 'wss:') u.protocol = 'https:';
-    else if (u.protocol === 'ws:') u.protocol = 'http:';
-    else return null;
-    u.pathname = '';
-    u.search = '';
-    u.hash = '';
-    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
-      u.port = '4003';
-    }
-    return u.toString().replace(/\/$/, '');
-  } catch { return null; }
+  return resolveRelaySelfServiceUrl((0, relayHealthDependencies.getSyncRelay)(), getRelaySelfServiceUrl());
 }
 
 async function _signSelfRequest(context: string) {
