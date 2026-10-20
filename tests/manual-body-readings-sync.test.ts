@@ -3,7 +3,7 @@ import {IDBFactory} from 'fake-indexeddb';
 import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {state} from '../js/state.js';
 import {runPostProfileStartupMaintenance} from '../js/startup-maintenance.js';
-import {createDefaultProfileData} from '../js/profile.js';
+import {createDefaultProfileData, migrateProfileData} from '../js/profile.js';
 import {saveImportedData} from '../js/data.js';
 import {encryptedGetItem} from '../js/crypto.js';
 import {logManualMetric, logManualBP, deleteManualMetric, deleteAllManualMetrics, parseManualMirrorEntry} from '../js/wearables-manual.js';
@@ -178,4 +178,33 @@ it('does not backfill private context after deletion intent commits but before t
   expect(state.importedData.manualBodyReadings?.[key('weight')]).toBeUndefined();
   expect(state.importedData.manualBodyReadings?.[key('note')]).toBeUndefined();
   expect(state.importedData.manualBodyReadings?.[key('tags')]).toBeUndefined();
+});
+
+
+it('keeps an unrelated profile byte-equivalent through normalization, persistence and empty manual catch-up', async () => {
+  expect(Object.hasOwn(state.importedData, 'manualBodyReadings')).toBe(false);
+  const before = JSON.stringify(state.importedData), stored = await encryptedGetItem(`labcharts-${profile}-imported`);
+  expect(migrateProfileData(state.importedData)).toBe(state.importedData);
+  expect(JSON.stringify(state.importedData)).toBe(before);
+  await catchUpManualBodyReadings(profile);
+  expect(JSON.stringify(state.importedData)).toBe(before);
+  expect(await encryptedGetItem(`labcharts-${profile}-imported`)).toBe(stored);
+  expect(await getMeta(profile, 'manual-body-readings-backfilled-v1')).toBeFalsy();
+});
+it.each([null, [], 'malformed'])('normalizes an explicitly malformed manual mirror without adding one to absent profiles: %j', value => {
+  const candidate = {...createDefaultProfileData(), manualBodyReadings: value} as unknown as Parameters<typeof migrateProfileData>[0];
+  expect(migrateProfileData(candidate).manualBodyReadings).toEqual({});
+  const mirror = {[key('weight')]: {value: null, updatedAt: 10}};
+  expect(migrateProfileData({...createDefaultProfileData(), manualBodyReadings: mirror}).manualBodyReadings).toBe(mirror);
+});
+it('still refreshes the existing manual summary when optional mirror catch-up rejects', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  const manual = await import('../js/wearables-manual-sync.js'), summary = await import('../js/wearables-summary.js');
+  const backfill = vi.spyOn(manual, 'catchUpManualBodyReadings').mockRejectedValue(new Error('Synthetic unavailable mirror'));
+  const refresh = vi.spyOn(summary, 'syncWearableSummary');
+  runPostProfileStartupMaintenance();
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledWith(profile, expect.objectContaining({manual: expect.any(Object)})));
+  expect(backfill).toHaveBeenCalledWith(profile);
+  await refresh.mock.results[0]!.value;
+  expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 80});
 });

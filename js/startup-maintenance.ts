@@ -100,9 +100,11 @@ function migrateLegacyBiometrics() {
       if (!current()) return;
       if (Object.keys(data.manualBodyReadings || {}).length || await hasManualData(profileId)) {
         if (!current()) return;
-        const manual = await import('./wearables-manual-sync.js');
-        if (!current()) return;
-        await manual.catchUpManualBodyReadings(profileId);
+        try {
+          const manual = await import('./wearables-manual-sync.js');
+          if (!current()) return;
+          await manual.catchUpManualBodyReadings(profileId);
+        } catch { /* Optional mirror catch-up must not prevent the existing L2 refresh. */ }
         if (!current()) return;
       }
       // Rebuild the L2 summary on every load that has manual data - covers
