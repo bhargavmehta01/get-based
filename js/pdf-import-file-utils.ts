@@ -44,6 +44,7 @@ export async function classifyImportFiles(files: File[] | FileList | null | unde
   for (const f of unmatched) {
     if (/\.(txt|csv)$/i.test(f.name)) {
       if (deps.isDNAFileByContent && await deps.isDNAFileByContent(f)) dnaFiles.push(f);
+      else if (deps.isCycleImportFile && await deps.isCycleImportFile(f)) cycleFiles.push(f);
       else textFiles.push(f);
     } else if (isXlsxFile(f)) {
       textFiles.push(f);
