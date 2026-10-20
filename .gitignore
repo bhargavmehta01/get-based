@@ -3636,3 +3636,11 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 /tests/helpers/native-tab-key.js.map
 
 /js/sync-relay-self-service.js
+
+# Verified CI compiler-output transport
+/scripts/ci-compiled.mjs
+/scripts/ci-compiled.mjs.map
+/scripts/prepare.mjs
+/scripts/prepare.mjs.map
+/tests/ci-compiled.test.js
+/tests/ci-compiled.test.js.map
