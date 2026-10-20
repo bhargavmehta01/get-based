@@ -290,6 +290,13 @@ document before early activation and checks the client census again. An unknown
 legacy document leaves the update waiting until the old app windows close; it must
 never be assigned a build from cache capability or a response timeout. Pages reply
 to the requesting waiting worker as well as their current controller.
+Update banners retain a visible, bounded pending state and bind automatic reload
+intent to the exact requested worker. Deferral, timeout, messaging failure or worker
+replacement restores an actionable status instead of silently hiding the update.
+Page exit clears pending reload intent; a delayed replacement cannot reuse it.
+Returning from the back/forward cache restores an eligible waiting offer or an
+installed version's manual Reload action without polling or reusing automatic
+consent; a deliberate Later dismissal remains effective.
 
 Known cached app navigations record the resulting document's build before startup
 styles load. Unproven network navigation responses cannot be promoted into the
