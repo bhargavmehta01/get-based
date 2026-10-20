@@ -67,6 +67,16 @@ Normal local npm installs continue to compile, and the shipping artifact keeps
 its separate source/build-identity verification. No coverage or resource limit is
 reduced by compiler reuse.
 
+Positive Light device-library and device-options acceptance uses an explicit
+catalog response from [the test fixture](../tests/helpers/light-device-catalog-fixture.ts).
+Product availability can differ between the checked-in preview catalog and the
+catalog fetched for a main build. The fixture supplies one known product through
+the real HTTP server; the shipping bundles, catalog loader, affiliate policy,
+service-worker caching, profile equality and cold-launch assertions remain real.
+These positive journeys verify behavior for an available product, not membership
+of a changing external production catalog. Artifact catalog identity is still
+qualified separately before browser acceptance.
+
 PR tests do not ordinarily collect whole-project coverage. Main-branch pushes,
 manual full test runs, and explicit release verification run the complete
 regression suite, critical coverage gates, and combined production measurement.

@@ -5,6 +5,7 @@ import {createDefaultProfileData} from '../../js/profile.js';
 import {DEVICE_ENGINE_VERSION} from '../../js/light-device-session-engine.js';
 import type {ProfileData} from '../../types/app-state.js';
 import {startKitServer} from './kit-server.js';
+import {lightDeviceCatalogRoute} from '../helpers/light-device-catalog-fixture.js';
 import {installDiscussionFixture} from '../helpers/chat-discussion-fixture.js';
 import {readComparisonAcceptanceProfile} from '../helpers/nutrition-comparison-fixture.js';
 import {installOfflineStartupDiagnostics} from '../helpers/offline-launch-diagnostics.js';
@@ -48,7 +49,7 @@ test('static device library first opens offline with picker, affiliate policy an
   test.setTimeout(120000);await installDiscussionFixture(context);await context.route('https://**',route=>route.abort());await installOfflineStartupDiagnostics(context);await context.addInitScript(seed,{defaults:createDefaultProfileData(),now:Date.now(),version:DEVICE_ENGINE_VERSION});
   const errors:string[]=[],csp:string[]=[];const observe=(page:Page)=>page.on('pageerror',error=>errors.push(error.message));observe(page);context.on('page',observe);
   await context.exposeBinding('deviceLibraryCsp',(_,value:string)=>csp.push(value));await context.addInitScript(()=>document.addEventListener('securitypolicyviolation',event=>{void(window as unknown as{deviceLibraryCsp(value:string):Promise<void>}).deviceLibraryCsp(event.violatedDirective);}));
-  const server=await startKitServer(process.env.GETBASED_KIT_ARTIFACT||path.resolve('.local-notes/sveltekit-build'));
+  const server=await startKitServer(process.env.GETBASED_KIT_ARTIFACT||path.resolve('.local-notes/sveltekit-build'),[lightDeviceCatalogRoute]);
   try{
     const loading=[{phase:'initial-online',readyMs:await ready(page,server.origin)}];await expect(page.locator('[data-light-device-presentation]')).toHaveCount(0);const before=await page.evaluate(readComparisonAcceptanceProfile);server.state.offline=true;
     await inspect(page);expect(await page.evaluate(readComparisonAcceptanceProfile)).toEqual(before);await page.close();
