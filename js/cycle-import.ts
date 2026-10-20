@@ -233,11 +233,11 @@ export const CYCLE_IMPORT_ADAPTERS = Object.freeze<CycleImportAdapter[]>([
   {
     id: 'natural_cycles',
     sourceLabel: 'Natural Cycles',
-    detect: context => context.kind === 'csv'
+    detect: context => (context.kind === 'csv' || context.kind === 'text')
       ? looksLikeNaturalCyclesCsv(context.text!, context.file.name)
       : context.kind === 'zip' && naturalCyclesArchiveEntries(context).length > 0,
     parse: async context => {
-      if (context.kind === 'csv') return parseNaturalCyclesCsv(context.text!, context.file.name || 'tracking_data.csv');
+      if (context.kind === 'csv' || context.kind === 'text') return parseNaturalCyclesCsv(context.text!, context.file.name || 'tracking_data.csv');
       const files: Array<{ name: string | undefined; text: string }> = [];
       for (const entry of naturalCyclesArchiveEntries(context)) {
         files.push({ name: entry.name, text: await entry.async('text') });

@@ -468,3 +468,13 @@ it('bounds cycle CSV recognition and treats an unreadable prefix as unrecognized
   file.slice = () => {throw new Error('Synthetic unreadable file');};
   expect(await isCycleImportFile(file)).toBe(false);
 });
+
+
+it('parses recognized Natural Cycles plain text through the same adapter as CSV', async () => {
+  const text = 'date,temperature,cycle day\n2026-01-01,36.5,1';
+  const file = new File([text], 'cycle-export.txt', {type: 'text/plain'});
+  const buckets = await classifyImportFiles([file], {isCycleImportFile, isDNAFile, isDNAFileByContent});
+  expect(buckets.cycleFiles).toEqual([file]); expect(buckets.textFiles).toEqual([]);
+  const parsed = await parseCycleImportFile(file);
+  expect(parsed).toMatchObject({source: 'natural_cycles', observations: [{date: '2026-01-01', bbtC: 36.5}]});
+});
