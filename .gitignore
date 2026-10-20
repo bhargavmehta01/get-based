@@ -3634,3 +3634,11 @@ tests/pwa/sveltekit-island-ownership.spec.js.map
 # Generated native keyboard traversal helper
 /tests/helpers/native-tab-key.js
 /tests/helpers/native-tab-key.js.map
+
+# Community import workflow canonical TypeScript output
+/js/import-dispatch.js
+/js/import-drop-zone-events.js
+/js/import-page-drop.js
+/js/import-page-drop-view.js
+/js/import-selection-confirmation.js
+/js/import-stylesheet.js

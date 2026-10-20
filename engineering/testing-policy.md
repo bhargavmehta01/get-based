@@ -460,7 +460,16 @@ exercise public picker controls and session-draft restoration, offline mapping a
 clearing, nested cancellation focus, marker/fixed/biometric selection persistence
 and closed-client cold launches while preserving accepted health records.
 [Import review boundary checks](../tests/pdf-import-review-boundaries.test.ts) also
-cover repeated opens and independent parent, child and concurrent modal scroll locks.
+cover repeated opens and independent parent, child and concurrent modal scroll locks. Import validation reports original row numbers even when rows are grouped,
+reveals every affected row across filters, and clears invalid state when a row is
+corrected or excluded. Blank saved custom-marker units adopt the incoming unit;
+incompatible established units still block the commit.
+[Page-wide import checks](../tests/import-page-drop.test.ts) and
+[populated Dashboard acceptance](../tests/playwright/import-page-drop.spec.ts)
+cover file-only dragging, specialized target ownership, busy/profile guards and
+cancellation before processing. Page drops show detected type counts; DNA and
+mixed selections require confirmation, and unrecognized text/CSV requires an
+explicit lab-report classification before it can enter an AI import pipeline.
 These focused checks do not establish physical touch behavior, installed-PWA/update
 acceptance or complete application acceptance.
 
