@@ -37,8 +37,10 @@ bootstrap HTML are packaging references, so an indirect feature edit does not
 pretend that the worker or HTML itself changed. Changed application modules
 still select their actual transitive behavior consumers and the app-shell graph
 and shipping-build contracts. Changes reaching application initialization also
-retain actual AppShell hydration acceptance in all four shipping browser projects. Unknown modules and untested Svelte owners fail
-closed even when unrelated packaging checks are selected.
+retain actual AppShell hydration acceptance in shipping Chromium for the merge
+gate and all four shipping browser projects in full verification. Unknown modules
+and untested Svelte owners fail closed even when unrelated packaging checks are
+selected.
 
 The planner may qualify a precache inventory diff as additive only against its
 actual Git base: the literal array must retain all existing entries in order,
@@ -77,12 +79,28 @@ These positive journeys verify behavior for an available product, not membership
 of a changing external production catalog. Artifact catalog identity is still
 qualified separately before browser acceptance.
 
-PR tests do not ordinarily collect whole-project coverage. Main-branch pushes,
-manual full test runs, and explicit release verification run the complete
-regression suite, critical coverage gates, and combined production measurement.
+PR and main-push tests do not ordinarily collect whole-project coverage.
+Nightly verification (02:17 UTC), manual full test runs, and explicit release
+verification run the complete regression suite, critical coverage gates, and
+combined production measurement.
 A passing selective check is not a new whole-project coverage measurement.
-The required PR `test` check owns affected acceptance. Full execution of the
-shared [test workflow](../.github/workflows/test.yml) includes the native Display
+The required PR `test` check owns affected acceptance. Its shipping matrix runs
+only Chromium, with one to four nonempty file shards. Affected unit tests and
+resource budgets remain required. In the merge tier, the same budget command runs
+before tests on the first Chromium shipping shard, or the unit runner when no
+shipping cases are selected. These executions use fresh browser profiles and keep
+the existing budgets and retained artifact. Full verification keeps its separate
+performance runner. Native-only behavior without a selected shipping
+counterpart, directly edited native tests, and changed native browser harnesses
+retain affected native execution. Other selected native regressions and shipping
+Firefox, desktop WebKit and mobile WebKit cases are deferred to nightly/full
+verification and listed in the retained plan. This changes when those regressions
+run; it does not make their assertions optional in full verification. A successful
+merge gate is narrower evidence than full or release acceptance.
+Main pushes compare against the previous main SHA and use the same affected tier;
+missing or initial history falls back to full verification. Superseded PR and main
+runs are cancelled, while explicit full verification remains intact.
+Full execution of the shared [test workflow](../.github/workflows/test.yml) includes the native Display
 suite and all SvelteKit browser projects. [Release verification](../.github/workflows/release-evidence.yml)
 reuses those full gates and adds separate real-model and container runtime checks.
 
@@ -97,9 +115,10 @@ restart before the unchanged application acceptance runs; private-store behavior
 is recorded only as a diagnostic. Standard UI shards for both shipping WebKit
 projects also run on Cocoa; Chromium and Firefox shipping acceptance and all native
 suites retain their Linux placement. The planner preserves the same global case
-inventory and disjoint standard/OPFS partitions; the required aggregate rejects
-missing or duplicate case receipts. Broad Linux WPE shipping UI acceptance is no
-longer a required gate. Its existing focused manual diagnostic covers only Lens
+inventory and disjoint standard/OPFS partitions; the full aggregate rejects
+missing or duplicate case receipts; the merge gate enforces the same exact-union
+check against its selected Chromium collection. Broad Linux WPE shipping UI
+acceptance is no longer a required gate. Its existing focused manual diagnostic covers only Lens
 and Wearables and cannot establish complete WPE UI compatibility.
 
 The [static SvelteKit distribution](static-sveltekit.md) has a local focused acceptance
