@@ -7,7 +7,7 @@ import {state} from '../js/state.js';
 import {encryptedGetItem, encryptedSetItem, encryptedRemoveItem} from '../js/crypto.js';
 import {createDefaultProfileData} from '../js/profile.js';
 import {setSyncAppOwner} from '../js/sync-runtime.js';
-import {applyPulledManualBodyReadings, catchUpManualBodyReadings} from '../js/wearables-manual-sync.js';
+import {applyPulledManualBodyReadings, catchUpManualBodyReadings, refreshRestoredManualSummary} from '../js/wearables-manual-sync.js';
 const date = '2026-09-21';
 beforeEach(async () => {
   vi.resetAllMocks(); state.currentProfile = 'origin'; state.importedData = createDefaultProfileData();
@@ -58,4 +58,43 @@ it('bounds retries when peer changes keep invalidating the upgrade snapshot', as
   });
   await expect(catchUpManualBodyReadings('origin')).rejects.toThrow(/save/i);
   expect(mocks.save).toHaveBeenCalledTimes(3); expect(mocks.flag).not.toHaveBeenCalled();
+});
+
+
+it.each(['profile', 'data', 'owner'])('does not write retired incoming data when %s changes during canonical intent lookup', async kind => {
+  const crypto = await import('../js/crypto.js'), read = crypto.encryptedGetItem, destination = createDefaultProfileData();
+  mocks.read.mockResolvedValue(null);
+  const lookup = vi.spyOn(crypto, 'encryptedGetItem').mockImplementationOnce(async (...args) => {
+    const raw = await read(...args);
+    if (kind === 'profile') {state.currentProfile = 'other'; state.importedData = destination;}
+    if (kind === 'data') state.importedData = destination;
+    if (kind === 'owner') setSyncAppOwner({id: 'owner-b'});
+    return raw;
+  });
+  try {
+    await applyPulledManualBodyReadings('origin', {manualBodyReadings: {[`weight.${date}`]: {value: 80, updatedAt: 100}}});
+    expect(lookup).toHaveBeenCalledOnce(); expect(mocks.write).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled(); expect(mocks.save).not.toHaveBeenCalled();
+    expect(destination).toEqual(createDefaultProfileData());
+  } finally {lookup.mockRestore();}
+});
+it('fails closed without row writes when canonical deletion intent cannot be read', async () => {
+  const crypto = await import('../js/crypto.js'); mocks.read.mockResolvedValue(null);
+  const lookup = vi.spyOn(crypto, 'encryptedGetItem').mockRejectedValueOnce(new Error('Synthetic locked canonical profile'));
+  try {
+    await expect(applyPulledManualBodyReadings('origin', {manualBodyReadings: {[`weight.${date}`]: {value: 80, updatedAt: 100}}})).rejects.toThrow('locked canonical profile');
+    expect(mocks.write).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled();
+  } finally {lookup.mockRestore();}
+});
+
+
+it.each(['profile', 'data', 'owner'])('does not publish a restored summary when %s retires during its row read', async kind => {
+  const destination = createDefaultProfileData();
+  mocks.range.mockImplementation(async () => {
+    if (kind === 'profile') {state.currentProfile = 'other'; state.importedData = destination;}
+    if (kind === 'data') state.importedData = destination;
+    if (kind === 'owner') setSyncAppOwner({id: 'owner-b'});
+    return [{source: 'manual', date, weight: 80}];
+  });
+  expect(await refreshRestoredManualSummary('origin')).toBe(false);
+  expect(mocks.save).not.toHaveBeenCalled(); expect(destination).toEqual(createDefaultProfileData());
 });

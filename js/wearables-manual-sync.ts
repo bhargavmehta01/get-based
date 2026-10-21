@@ -7,12 +7,13 @@ import {encryptedGetItem} from './crypto.js';
 import {profileStorageKey, migrateProfileData} from './profile.js';
 import {getSyncAppOwner} from './sync-runtime.js';
 import {isProfileReadBlocked} from './profile-load-safety.js';
+import {isoDay} from './wearable-adapters.js';
 import {queueManualRowWrite} from './wearables-manual-lock.js';
 import {getDaily, getDailyRange, getMeta, setMeta, upsertDaily, deleteDaily} from './wearables-store.js';
 import {
   MANUAL_METRICS, MANUAL_MIRROR_FIELDS, MANUAL_HISTORY_START, MANUAL_HISTORY_END,
   persistManualMutation, updateManualConnection,
-  isManualMetricTombstoned, manualMirror, manualMirrorKey, mirrorManualPatch, parseManualMirrorEntry,
+  isManualMetricTombstoned, manualMetricDeletionClock, manualMirror, manualMirrorKey, mirrorManualPatch, parseManualMirrorEntry,
 } from './wearables-manual.js';
 type ManualData = WearableProfileMutation & Partial<Pick<ProfileData, 'manualBodyReadings' | 'manualMetricTombstones'>>;
 type Entry = NonNullable<ReturnType<typeof parseManualMirrorEntry>>;
@@ -38,17 +39,40 @@ export async function applyPulledManualBodyReadings(profileId: string, data: Man
       if (!current()) break;
       const existing = await getDaily(profileId, 'manual', date);
       if (!current()) break;
+      // Deletion metadata commits outside the row lock. Read its latest
+      // canonical intent INSIDE this boundary, not from the older pull draft.
+      const raw = await encryptedGetItem(profileStorageKey(profileId, 'imported'), {throwOnDecryptError: true});
+      if (!current()) break;
+      const parsed: unknown = raw == null ? {} : JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Manual profile data is unavailable.');
+      const latest = parsed as ManualData;
       const next: StoredWearableRow = {...existing, source: 'manual', date};
       const clocks = existing?._manualSyncAt && typeof existing._manualSyncAt === 'object' ? {...existing._manualSyncAt as Record<string, unknown>} : {};
-      for (const entry of entries) {
+      for (const incoming of entries) {
+        const saved = parseManualMirrorEntry(manualMirrorKey(incoming.field, date), latest.manualBodyReadings?.[manualMirrorKey(incoming.field, date)]);
+        const useSaved = !!saved && saved.updatedAt >= incoming.updatedAt;
+        const entry = useSaved ? saved! : incoming, selected = useSaved ? latest : data;
+        const deletionClock = Math.max(manualMetricDeletionClock(entry.field, date, latest), manualMetricDeletionClock(entry.field, date, data));
+        const deleted = MANUAL_METRICS.includes(entry.field)
+          && (isManualMetricTombstoned(entry.field, date, selected) || (deletionClock > 0 && deletionClock >= entry.updatedAt));
+        const updatedAt = deleted ? Math.max(entry.updatedAt, deletionClock) : entry.updatedAt;
         const localClock = typeof clocks[entry.field] === 'number' ? clocks[entry.field] as number : -1;
-        const deleted = MANUAL_METRICS.includes(entry.field) && isManualMetricTombstoned(entry.field, entry.date, data);
-        if (!deleted && localClock > entry.updatedAt) continue;
+        if (localClock > updatedAt) continue;
         if (deleted || entry.value === null) delete next[entry.field];
         else next[entry.field] = entry.value;
-        clocks[entry.field] = entry.updatedAt;
+        clocks[entry.field] = updatedAt;
+      }
+      // A deleted metric may be absent from this draft's incoming fields.
+      let hasDeletionIntent = false;
+      for (const field of MANUAL_METRICS) {
+        const deletedAt = Math.max(manualMetricDeletionClock(field, date, latest), manualMetricDeletionClock(field, date, data));
+        hasDeletionIntent ||= deletedAt > 0;
+        if (deletedAt > 0 && !(typeof clocks[field] === 'number' && clocks[field] > deletedAt)) {
+          delete next[field]; clocks[field] = deletedAt;
+        }
       }
       const measurable = MANUAL_METRICS.some(field => next[field] != null);
+      if (!measurable && hasDeletionIntent) { delete next.tags; delete next.note; }
       hasReadings ||= measurable;
       if (!existing && !measurable) continue;
       next._manualSyncAt = clocks;
@@ -63,6 +87,48 @@ export async function applyPulledManualBodyReadings(profileId: string, data: Man
     if (connected) updateManualConnection(data);
     return {written, connected};
   });
+}
+
+/** Restore only manual projections; foreign raw histories are not on this device. */
+export async function refreshRestoredManualSummary(profileId: string): Promise<boolean> {
+  const current = ownership(profileId), key = profileStorageKey(profileId, 'imported');
+  if (!current()) return false;
+  const raw = await encryptedGetItem(key, {throwOnDecryptError: true});
+  if (!current() || raw == null) return false;
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  const base = parsed as ProfileData;
+  const rows = await getDailyRange(profileId, 'manual', MANUAL_HISTORY_START, isoDay());
+  if (!current()) return false;
+  const {computeWearableSummary} = await import('./wearables-summary-model.js');
+  if (!current()) return false;
+  const derived = computeWearableSummary({manual: rows}, {manual: base.wearableConnections?.manual || {}});
+  const summary = {...base.wearableSummary, summaryUpdatedAt: derived.summaryUpdatedAt,
+    sources: {...base.wearableSummary?.sources}, metrics: {...base.wearableSummary?.metrics}};
+  const manualSource = derived.sources.manual;
+  if (manualSource && (base.wearableConnections?.manual || Object.keys(derived.metrics).length)) summary.sources.manual = manualSource;
+  else delete summary.sources.manual;
+  const primaryOf = (value: unknown) => value && typeof value === 'object' && 'primarySource' in value ? value.primarySource : undefined;
+  for (const [metric, existing] of Object.entries(summary.metrics)) {
+    if (primaryOf(existing) === 'manual' && !derived.metrics[metric]) delete summary.metrics[metric];
+  }
+  for (const [metric, value] of Object.entries(derived.metrics)) {
+    const existing = summary.metrics[metric];
+    // A portable non-manual projection remains authoritative when its raw
+    // history is unavailable. Never replace it with an incomplete local view.
+    const primary = primaryOf(existing);
+    if (typeof primary !== 'string' || !primary || primary === 'manual'
+      || base.wearablePrimaryOverride?.[metric] === 'manual') summary.metrics[metric] = value;
+  }
+  try {
+    await persistManualMutation(profileId, {...base, wearableSummary: summary}, base, {expectedData: raw, notifyOnStaleSnapshot: false});
+  } catch (error) {
+    if (!current()) return false;
+    const latest = await encryptedGetItem(key, {throwOnDecryptError: true});
+    if (!current() || latest !== raw) return false;
+    throw error;
+  }
+  return current();
 }
 
 /** Page load and profile switch share one add-only upgrade; empty/locked IDB never implies deletion. */

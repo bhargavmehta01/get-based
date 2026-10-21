@@ -17,6 +17,10 @@ write the narrow mirror alongside the existing guarded profile mutation. Pull
 reconciliation applies validated fields to source `manual`, honors per-metric
 and delete-all intent, and establishes the local manual connection when needed.
 A newer local field edit cannot be replaced by an older blob or row overlay.
+Inside the manual row-write boundary, reconciliation rereads canonical persisted
+field clocks and deletion intent, including peer commits newer than its draft.
+A surviving row clock or missing row cannot revive a deleted value or its private
+context; a genuinely newer explicit re-add remains eligible.
 User deletions clear values and private field metadata, retain their clocks and
 use the existing `manualMetricTombstones` protocol; an explicit re-add clears its
 delete marker. An empty local store never produces deletion intent.
@@ -32,8 +36,17 @@ changes retire asynchronous reconciliation work. The module is requested only
 when manual history or a manual mirror exists.
 
 Single-profile portable exports include the mirror even when a profile has no
-lab entries. Both JSON restore paths retain the map; the normal startup/profile
-catch-up materializes its validated records. Raw vendor histories remain outside
+lab entries or a nutrition archive. The presence gate requires a validated
+explicit measurement or deletion, not an unknown field or context-only payload.
+Both JSON restore paths retain the map. A manual client restore first drains the
+profile facade's existing wearable-refresh promise before copying fields, so an
+older load task cannot publish an incomplete projection after the import. After a client restore saves successfully,
+its still-current profile catches up Reading rows and refreshes their summary
+before the import shell publishes success. Its scoped summary refresh preserves
+non-manual source projections and preferences, and its locked snapshot guard
+retires a stale summary rather than replacing a concurrent edit. It does not depend on a startup task
+that may already have finished against the empty profile. Normal startup/profile
+catch-up continues to materialize restored database bundles. Raw vendor histories remain outside
 this portable profile surface.
 
 Verification combines [real store and row-codec tests](../tests/manual-body-readings-sync.test.ts),

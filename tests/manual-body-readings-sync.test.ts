@@ -5,9 +5,9 @@ import {state} from '../js/state.js';
 import {runPostProfileStartupMaintenance} from '../js/startup-maintenance.js';
 import {createDefaultProfileData, migrateProfileData} from '../js/profile.js';
 import {saveImportedData} from '../js/data.js';
-import {encryptedGetItem} from '../js/crypto.js';
+import {encryptedGetItem, encryptedSetItem} from '../js/crypto.js';
 import {logManualMetric, logManualBP, deleteManualMetric, deleteAllManualMetrics, parseManualMirrorEntry} from '../js/wearables-manual.js';
-import {applyPulledManualBodyReadings, catchUpManualBodyReadings} from '../js/wearables-manual-sync.js';
+import {applyPulledManualBodyReadings, catchUpManualBodyReadings, refreshRestoredManualSummary} from '../js/wearables-manual-sync.js';
 import * as manualStore from '../js/wearables-store.js';
 import {getDaily, getMeta, clearSource, upsertDaily, deleteWearablesDB, configureWearablesStoreCrypto} from '../js/wearables-store.js';
 import {mergeImportedData} from '../js/data-merge.js';
@@ -207,4 +207,170 @@ it('still refreshes the existing manual summary when optional mirror catch-up re
   expect(backfill).toHaveBeenCalledWith(profile);
   await refresh.mock.results[0]!.value;
   expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 80});
+});
+
+
+it.each(['surviving-row', 'removed-row', 'delete-all'])('does not let a stale Sync draft restore deletion intent after %s', async variant => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  await logManualMetric(profile, 'weight', {date, value: 80, note: 'Synthetic private context'});
+  if (variant === 'surviving-row') await logManualMetric(profile, 'rhr', {date, value: 60});
+  const draft = structuredClone(state.importedData);
+  if (variant === 'delete-all') await deleteAllManualMetrics(profile);
+  else await deleteManualMetric(profile, 'weight', date);
+  const before = await encryptedGetItem(`labcharts-${profile}-imported`);
+  await applyPulledManualBodyReadings(profile, draft);
+  const row = await getDaily(profile, 'manual', date);
+  if (variant === 'surviving-row') {
+    expect(row?.weight).toBeUndefined(); expect(row?.rhr).toBe(60);
+  } else expect(row).toBeNull();
+  expect(await encryptedGetItem(`labcharts-${profile}-imported`)).toBe(before);
+});
+
+it('imports the actual manual-only share payload without a nutrition archive', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  const payload = await buildClientExportObject(profile, false, false);
+  expect(payload.entries).toEqual([]); expect(payload.notes).toEqual([]); expect(payload.chat).toBeUndefined(); expect(payload.nutrition).toBeUndefined();
+  const {importDataJSON} = await import('../js/export-import.js');
+  await importDataJSON(new File([JSON.stringify(payload)], 'manual-only-share.json'));
+  const restored = state.currentProfile;
+  try {
+    expect(restored).not.toBe(profile);
+    const saved = JSON.parse((await encryptedGetItem(`labcharts-${restored}-imported`))!);
+    expect(saved).not.toBeNull();
+    expect(saved.manualBodyReadings).toEqual(payload.manualBodyReadings);
+  } finally { if (restored !== profile) await deleteWearablesDB(restored); }
+});
+
+it('materializes post-save restored manual history even after the initial profile refresh finished empty', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  const exported = await buildClientExportObject(profile, false, false);
+  const payload = {...exported, notes: [{date, text: 'Synthetic restore receipt'}]};
+  const profiles = await import('../js/profile.js'), runtime = await import('../js/profile-runtime.js');
+  const load = profiles.loadProfile;
+  vi.spyOn(profiles, 'loadProfile').mockImplementation(async (...args) => {
+    await load(...args);
+    // Complete the real pre-import refresh before the importer copies its mirror.
+    await runtime.refreshProfileWearables(state.currentProfile, state.importedData.biometrics);
+    expect(await getDaily(state.currentProfile, 'manual', date)).toBeNull();
+  });
+  const {importDataJSON} = await import('../js/export-import.js');
+  await importDataJSON(new File([JSON.stringify(payload)], 'manual-restore.json'));
+  const restored = state.currentProfile;
+  try {
+    expect(restored).not.toBe(profile);
+    expect(profiles.loadProfile).toHaveBeenCalledOnce();
+    expect(JSON.parse((await encryptedGetItem(`labcharts-${restored}-imported`))!).manualBodyReadings).toEqual(exported.manualBodyReadings);
+    expect(await getDaily(restored, 'manual', date)).toMatchObject({weight: 80});
+    expect(state.importedData.wearableSummary?.metrics?.weight?.latest).toBe(80);
+  } finally { if (restored !== profile) await deleteWearablesDB(restored); }
+});
+
+
+it('honors a peer deletion already persisted while this tab still has its older live snapshot', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  await logManualMetric(profile, 'rhr', {date, value: 60});
+  const draft = structuredClone(state.importedData), peer = structuredClone(state.importedData);
+  peer.manualBodyReadings![key('weight')] = {value: null, updatedAt: 2000};
+  peer.manualMetricTombstones = {[key('weight')]: 2000};
+  const committed = JSON.stringify(peer); await encryptedSetItem(`labcharts-${profile}-imported`, committed);
+  expect(state.importedData.manualBodyReadings![key('weight')]!.value).toBe(80);
+  await applyPulledManualBodyReadings(profile, draft);
+  expect(await getDaily(profile, 'manual', date)).toMatchObject({rhr: 60});
+  expect((await getDaily(profile, 'manual', date))?.weight).toBeUndefined();
+  expect(await encryptedGetItem(`labcharts-${profile}-imported`)).toBe(committed);
+});
+it('allows an explicitly newer remote re-add after an older canonical deletion', async () => {
+  state.importedData.manualBodyReadings = {[key('weight')]: {value: null, updatedAt: 1000}};
+  state.importedData.manualMetricTombstones = {[key('weight')]: 1000}; await saveImportedData();
+  const draft = {...createDefaultProfileData(), manualBodyReadings: {[key('weight')]: {value: 82, updatedAt: 2000}}, manualMetricTombstones: {[key('weight')]: 0}};
+  await applyPulledManualBodyReadings(profile, draft);
+  expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 82, _manualSyncAt: {weight: 2000}});
+});
+it('keeps a newer row edit whose profile metadata has not caught up with an older deletion', async () => {
+  state.importedData.manualBodyReadings = {[key('weight')]: {value: null, updatedAt: 1000}};
+  state.importedData.manualMetricTombstones = {[key('weight')]: 1000}; await saveImportedData();
+  await upsertDaily(profile, {source: 'manual', date, weight: 82, _manualSyncAt: {weight: 2000}});
+  await applyPulledManualBodyReadings(profile, {...createDefaultProfileData(), manualBodyReadings: {[key('weight')]: {value: 80, updatedAt: 500}}});
+  expect(await getDaily(profile, 'manual', date)).toMatchObject({weight: 82, _manualSyncAt: {weight: 2000}});
+});
+it.each(['unknown-field', 'invalid-date', 'invalid-clock', 'context-only'])('does not broaden manual-only exports to %s payloads', async kind => {
+  const field = kind === 'unknown-field' ? 'vendorRaw' : kind === 'context-only' ? 'note' : 'weight';
+  const day = kind === 'invalid-date' ? '2026-02-30' : date;
+  state.importedData.manualBodyReadings = {[`${field}.${day}`]: {value: field === 'weight' ? 80 : 'Synthetic unrelated context', updatedAt: kind === 'invalid-clock' ? -1 : 1000}};
+  await saveImportedData();
+  await expect(buildClientExportObject(profile, false, false)).rejects.toThrow('No data to export');
+  const before = await encryptedGetItem(`labcharts-${profile}-imported`);
+  const {importDataJSON} = await import('../js/export-import.js');
+  await importDataJSON(new File([JSON.stringify({entries: [], manualBodyReadings: state.importedData.manualBodyReadings})], 'invalid-manual.json'));
+  expect(await encryptedGetItem(`labcharts-${profile}-imported`)).toBe(before);
+  expect(await getDaily(profile, 'manual', date)).toBeNull();
+});
+
+
+it('keeps exported non-manual source summaries and source preference while materializing a restored manual row', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  await upsertDaily(profile, {source: 'withings', date, weight: 90, hrv_rmssd: 45});
+  state.importedData.wearablePrimaryOverride = {weight: 'withings'};
+  const {syncWearableSummary} = await import('../js/wearables-summary.js');
+  await syncWearableSummary(profile, {manual: {}, withings: {}}, {force: true}); await saveImportedData();
+  const payload = await buildClientExportObject(profile, false, false);
+  const expected = structuredClone(state.importedData.wearableSummary!);
+  expect(expected.metrics.weight!.primarySource).toBe('withings'); expect(expected.metrics.hrv_rmssd!.latest).toBe(45);
+  const {importDataJSON} = await import('../js/export-import.js');
+  await importDataJSON(new File([JSON.stringify(payload)], 'mixed-summary-share.json'));
+  const restored = state.currentProfile;
+  try {
+    expect(restored).not.toBe(profile); expect(await getDaily(restored, 'manual', date)).toMatchObject({weight: 80});
+    expect(state.importedData.wearableSummary!.sources.withings).toEqual(expected.sources.withings);
+    expect(state.importedData.wearableSummary!.metrics.hrv_rmssd).toEqual(expected.metrics.hrv_rmssd);
+    expect(state.importedData.wearableSummary!.metrics.weight).toEqual(expected.metrics.weight);
+    expect(state.importedData.wearablePrimaryOverride?.weight).toBe('withings');
+  } finally {if (restored !== profile) await deleteWearablesDB(restored);}
+});
+
+
+it('leaves a newer canonical peer edit intact when a restored summary snapshot retires during its row read', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  const read = manualStore.getDailyRange;
+  vi.spyOn(manualStore, 'getDailyRange').mockImplementationOnce(async (...args) => {
+    const rows = await read(...args), current = JSON.parse((await encryptedGetItem(`labcharts-${profile}-imported`))!);
+    current.contextNotes = 'Synthetic newer peer context'; await encryptedSetItem(`labcharts-${profile}-imported`, JSON.stringify(current));
+    return rows;
+  });
+  expect(await refreshRestoredManualSummary(profile)).toBe(false);
+  expect(JSON.parse((await encryptedGetItem(`labcharts-${profile}-imported`))!).contextNotes).toBe('Synthetic newer peer context');
+});
+
+
+it('does not let a profile refresh started before restore overwrite its newly imported source projections', async () => {
+  await logManualMetric(profile, 'weight', {date, value: 80});
+  await upsertDaily(profile, {source: 'withings', date, weight: 90, hrv_rmssd: 45});
+  state.importedData.wearablePrimaryOverride = {weight: 'withings'};
+  const summary = await import('../js/wearables-summary.js');
+  await summary.syncWearableSummary(profile, {manual: {}, withings: {}}, {force: true}); await saveImportedData();
+  const exported = await buildClientExportObject(profile, false, false), payload: Partial<typeof exported> = {...exported}; delete payload.profile;
+  const expected = structuredClone(state.importedData.wearableSummary!);
+  await clearSource(profile, 'manual'); await clearSource(profile, 'withings'); state.importedData = createDefaultProfileData(); await saveImportedData();
+  const runtime = await import('../js/profile-runtime.js'), connect = await import('../js/wearables-connect.js'), profiles = await import('../js/profile.js');
+  let earlier!: Promise<void>;
+  const previousProfile = profiles.configureProfileRuntimeDeps({refreshProfileWearables: (...args: Parameters<typeof runtime.refreshProfileWearables>) => {earlier = runtime.refreshProfileWearables(...args); return earlier;}});
+  const previous = runtime.configureProfileRefreshDeps({syncWearableSummary: summary.syncWearableSummary});
+  const saves: Promise<unknown>[] = [], previousSummary = summary.configureWearableSummary({saveImportedData: () => {const saved = saveImportedData(); saves.push(saved); return saved;}});
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => {entered = resolve;}), gate = new Promise<void>(resolve => {release = resolve;});
+  const recover = connect.recoverPendingWearableDisconnect;
+  const lookup = vi.spyOn(connect, 'recoverPendingWearableDisconnect').mockImplementationOnce(async (...args) => {const result = await recover(...args); entered(); await gate; return result;});
+  await profiles.loadProfile(profile);
+  let safety: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await started;
+    safety = setTimeout(release, 100);
+    const {importDataJSON} = await import('../js/export-import.js'); await importDataJSON(new File([JSON.stringify(payload)], 'manual-merge-restore.json'));
+    expect(state.importedData.wearableSummary!.sources.withings).toEqual(expected.sources.withings);
+    release(); await earlier; await Promise.all(saves);
+    expect(state.importedData.wearableSummary!.sources.withings).toEqual(expected.sources.withings);
+    expect(state.importedData.wearableSummary!.metrics.hrv_rmssd).toEqual(expected.metrics.hrv_rmssd);
+    expect(state.importedData.wearableSummary!.metrics.weight).toEqual(expected.metrics.weight);
+  } finally {if (safety) clearTimeout(safety);release(); await earlier; await Promise.allSettled(saves);lookup.mockRestore();runtime.configureProfileRefreshDeps(previous);profiles.configureProfileRuntimeDeps(previousProfile);summary.configureWearableSummary(previousSummary);}
 });

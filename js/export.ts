@@ -216,7 +216,8 @@ export async function buildClientExportObject(profileId: string, includeChat = f
   (migrateCustomMarkerIdentities as (value:unknown)=>ReturnType<typeof migrateCustomMarkerIdentities>)(data?.customMarkers);
   if (data) (migrateMarkerPlacements as (data: unknown)=>ReturnType<typeof migrateMarkerPlacements>)(data);
   const hasManualReadings = data.manualBodyReadings && typeof data.manualBodyReadings === 'object'
-    && !Array.isArray(data.manualBodyReadings) && Object.keys(data.manualBodyReadings).length > 0;
+    && !Array.isArray(data.manualBodyReadings) && Object.keys(data.manualBodyReadings).length > 0
+    && (await import('./wearables-manual.js')).hasManualBodyReadings(data.manualBodyReadings);
   if ((!data || !data.entries || data.entries.length === 0) && !nutrition?.meals?.length && !hasManualReadings) throw new Error('No data to export for this client');
 
   const exportObj: ClientExportObject = {

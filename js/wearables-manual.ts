@@ -103,6 +103,14 @@ export function parseManualMirrorEntry(key: string, raw: unknown) {
     : !Array.isArray(value) || value.length > MANUAL_TAGS.length || value.some(tag => !MANUAL_TAGS.includes(tag)))) return null;
   return {field, date, value, updatedAt: entry.updatedAt};
 }
+/** A portable manual surface must contain a valid explicit measurement or deletion. */
+export function hasManualBodyReadings(value: unknown): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.entries(value).some(([key, raw]) => {
+      const entry = parseManualMirrorEntry(key, raw);
+      return !!entry && MANUAL_METRICS.includes(entry.field);
+    });
+}
 export function mirrorManualPatch(imported: ManualProfile, date: string, patch: Record<string, unknown>, updatedAt: number) {
   const mirror = manualMirror(imported);
   for (const field of MANUAL_MIRROR_FIELDS) {
@@ -136,20 +144,20 @@ function _manualMetricTombstones(imported: ManualProfile | null | undefined) {
   return imported[MANUAL_TOMBSTONE_FIELD];
 }
 
-export function isManualMetricTombstoned(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
+export function manualMetricDeletionClock(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
   const key = manualMetricTombstoneKey(metric, date);
-  if (!key) return false;
+  if (!key) return 0;
   const tombstones = imported?.[MANUAL_TOMBSTONE_FIELD];
-  if (!tombstones || typeof tombstones !== 'object') return false;
+  if (!tombstones || typeof tombstones !== 'object') return 0;
   // An exact zero is an intentional re-add and wins over an earlier
   // delete-all marker. Otherwise the metric-wide marker protects dates this
   // device never had locally and therefore could not enumerate at deletion.
-  if (Object.prototype.hasOwnProperty.call(tombstones, key)) {
-    return Number.isFinite(Number(tombstones[key])) && Number(tombstones[key]) > 0;
-  }
   const allKey = manualMetricTombstoneKey(metric, 'all');
-  const allValue = allKey ? tombstones[allKey] : 0;
-  return Number.isFinite(Number(allValue)) && Number(allValue) > 0;
+  const value = Number(Object.hasOwn(tombstones, key) ? tombstones[key] : allKey ? tombstones[allKey] : 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+export function isManualMetricTombstoned(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
+  return manualMetricDeletionClock(metric, date, imported) > 0;
 }
 
 function _recordManualMetricTombstone(metric: unknown, date: unknown, deletedAt: unknown, imported: ManualProfile) {

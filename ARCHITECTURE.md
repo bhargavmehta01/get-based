@@ -487,6 +487,10 @@ the higher-layer behavior through a narrow runtime seam.
   map, keyed by metric and date; source histories from vendors or file imports
   are excluded. The local Reading store remains the display source of truth,
   reconciled from this narrow map with deletion intent and guarded profile writes.
+  Row writes reread canonical deletion/field clocks inside their manual write
+  boundary. Portable manual restores drain prior profile-load wearable work
+  before copying fields, then materialize rows and refresh only manual-owned
+  projections before publishing their still-current import shell.
 - Supplement and medication status is derived from dated periods. Product-label
   facts, a user's regimen, inactive materials, and source quality evidence stay
   separate; AI consumers use the bounded projections in `supplement-context.js`.
