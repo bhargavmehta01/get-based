@@ -117,7 +117,7 @@ describe('affected PR test planning', () => {
   it('preserves explicit full release verification and the complete combined coverage gate while PRs use an explicit plan', () => {
     const workflow = fs.readFileSync(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8');
     const release = fs.readFileSync(new URL('../.github/workflows/release-evidence.yml', import.meta.url), 'utf8');
-    expect(workflow).toContain("github.event_name != 'pull_request' || inputs.full_suite == true");
+    expect(workflow).toContain("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full_suite == true");
     expect(workflow).toMatch(/name: Full unit coverage and unchanged critical behavior floors\n\s+if: needs.prepare.outputs.full == 'true'/);
     expect(workflow).toContain('node node_modules/vitest/vitest.mjs run --coverage');
     expect(workflow).toContain('node node_modules/vitest/vitest.mjs run --config vitest.critical.config.js');
@@ -293,7 +293,8 @@ describe('shipping transfer-budget PR scope', () => {
     expect(workflow.match(/run: node scripts\/build-sveltekit.mjs --output dist/g)).toHaveLength(1);
     expect(workflow).toContain('GETBASED_KIT_ARTIFACT: ${{ github.workspace }}/dist');
     expect(workflow).toContain('run: node node_modules/vitest/vitest.mjs run tests/production-build.test.ts');
-    expect(workflow).toContain("if: needs.prepare.outputs.performance == 'true'");
+    expect(workflow).toContain("if: needs.prepare.outputs.full != 'true' && needs.prepare.outputs.performance == 'true' && startsWith(matrix.shard, '1/')");
+    expect(workflow).toContain("if: needs.prepare.outputs.full != 'true' && needs.prepare.outputs.performance == 'true' && needs.prepare.outputs.kit != 'true'");
     expect(workflow).toContain('run: node scripts/sveltekit-performance-budget.mjs --artifact "$GETBASED_KIT_ARTIFACT" --output .local-notes/ci/performance');
     expect(workflow).toContain('name: shipping-inputs');
     expect(workflow.match(/ci-artifact.mjs verify --artifact dist --transport \.local-notes\/ci\/transport --github-env/g)).toHaveLength(5);
@@ -514,4 +515,41 @@ describe('additive module precache qualification', () => {
       expect(additivePrecacheModules(before, changed, known)).toBeNull();
     }
   });
+});
+
+
+describe('native-only behavior in mixed shipping changes', () => {
+  it('keeps actual native consumers when only another changed runtime has shipping acceptance', () => {
+    const plan = createTestPlan(new Map([
+      ['js/native-only.ts', 'export const native = true;'],
+      ['js/shipping.ts', 'export const shipped = true;'],
+      ['tests/playwright/native-only.spec.ts', "import '../../js/native-only.js';"],
+      ['tests/pwa/sveltekit.spec.ts', "import '../../js/shipping.js';"],
+    ]), ['js/native-only.ts', 'js/shipping.ts']);
+    expect(plan.uncovered).toEqual([]);
+    expect(plan.nativeRequired).toEqual(['tests/playwright/native-only.spec.ts']);
+    expect(plan.kit).toEqual(['tests/pwa/sveltekit.spec.ts']);
+  });
+  it('defers native consumers when the same runtime has a selected shipping journey', () => {
+    const plan = createTestPlan(new Map([
+      ['js/shared.ts', 'export const shared = true;'],
+      ['tests/playwright/shared.spec.ts', "import '../../js/shared.js';"],
+      ['tests/pwa/sveltekit.spec.ts', "import '../../js/shared.js';"],
+    ]), ['js/shared.ts']);
+    expect(plan.nativeRequired).toBeUndefined();
+    expect(plan.browser).toEqual(['tests/playwright/shared.spec.ts']);
+  });
+});
+
+it('retains the exact native consumers of a changed helper alongside unrelated broad runtime selection', () => {
+  const helper = 'tests/helpers/browser-fixture.ts', native = 'tests/playwright/focused.spec.ts';
+  const plan = createTestPlan(new Map([
+    [helper, 'export const fixture = true;'],
+    ['js/main.ts', 'export const main = true;'],
+    [native, "import '../helpers/browser-fixture.js';"],
+    ['tests/playwright/unrelated.spec.ts', ''],
+    ['tests/pwa/sveltekit.spec.ts', "import '../helpers/browser-fixture.js';"],
+  ]), [helper, 'js/main.ts']);
+  expect(plan.browser).toEqual([native, 'tests/playwright/unrelated.spec.ts']);
+  expect(plan.nativeRequired).toEqual([native]);
 });
