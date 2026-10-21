@@ -3,8 +3,10 @@
 import { configureRuntimeDependencies } from './runtime-callbacks.js';
 import { isChatModuleLoaded, loadChatModule } from './chat-loader.js';
 import { state } from './state.js';
+import { getSyncAppOwner } from './sync-runtime.js';
 import {
   reconcileManualMetricTombstones,
+  hasManualData,
   isManualMetricTombstoned,
 } from './wearables-manual.js';
 
@@ -83,6 +85,13 @@ export async function refreshProfileWearables(profileId: string, biometrics: unk
   // The user can swap profile A→B during an IDB read. Abort before and after
   // summary persistence so A's metrics can never be saved into B's profile.
   if (!isCurrent()) return;
+  if (Object.keys(data.manualBodyReadings || {}).length || await hasManualData(profileId)) {
+    if (!isCurrent()) return;
+    const manual = await import('./wearables-manual-sync.js');
+    if (!isCurrent()) return;
+    try { await manual.catchUpManualBodyReadings(profileId); } catch {}
+    if (!isCurrent()) return;
+  }
   try { await (profileRefreshDeps as ProfileRefreshOperations).syncWearableSummary(profileId, connect.listConnectedSources()); } catch {}
   if (!isCurrent()) return;
   connect.syncStaleWearablesNow?.().catch(() => {});
@@ -94,10 +103,18 @@ export async function refreshProfileWearables(profileId: string, biometrics: unk
 // from the user's perspective.
 export async function reconcilePulledManualWearables(profileId: unknown, merged: unknown) {
   if (!profileId || profileId !== state.currentProfile || !merged || typeof merged !== 'object') return false;
+  const live = state.importedData, owner = getSyncAppOwner();
+  const current = () => state.currentProfile === profileId && state.importedData === live && getSyncAppOwner() === owner;
   // Reconcile the draft without exposing it as live data across an await.
   const result = await (reconcileManualMetricTombstones as (profileId:unknown,imported:unknown)=>ReturnType<typeof reconcileManualMetricTombstones>)(profileId, merged);
-  if (!result || result.skipped) return false;
+  if (!current() || !result || result.skipped) return false;
   let changed = !!(result.prunedRows || result.prunedLegacy);
+  if (Object.keys((merged as {manualBodyReadings?: object}).manualBodyReadings || {}).length) {
+    const manual = await import('./wearables-manual-sync.js');
+    if (!current()) return false;
+    const applied = await manual.applyPulledManualBodyReadings(profileId as string, merged as Parameters<typeof manual.applyPulledManualBodyReadings>[1], current);
+    changed ||= !!applied.written || applied.connected;
+  }
   // L1 histories are device-local. A local rebuild cannot replace this shared
   // summary: invalidate only manual latest readings explicitly deleted by pull.
   for (const [metric, value] of Object.entries((merged as PulledWearableReader).wearableSummary?.metrics || {})) {

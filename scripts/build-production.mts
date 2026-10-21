@@ -47,6 +47,7 @@ const SW_BUNDLES_END = '  // PRODUCTION_BUNDLE_ASSETS_END';
 const LAZY_SYNC_CHUNK_MODULES = new Set([
   path.join(ROOT, 'js', 'routstr-balance-settlement.js'),
   path.join(ROOT, 'js', 'sync-apply.js'),
+  path.join(ROOT, 'js', 'wearables-manual-sync.js'),
   path.join(ROOT, 'js', 'sync-chat-merge.js'),
   path.join(ROOT, 'js', 'sync-evolu8-candidate.js'),
   path.join(ROOT, 'js', 'wearables-credential-vault.js'),

@@ -1,9 +1,10 @@
-import type { ProfileData } from '../types/app-state.js';
+import type {ProfileSaveOptions} from './data-core-types.js';
+import type { ProfileData, ManualBodyReading } from '../types/app-state.js';
 import type { Biometrics, BloodPressureValue } from '../types/profile-context-data.js';
 import type { StoredWearableRow } from './wearable-storage-types.js';
 import type { WearableProfileMutation } from './wearable-persistence-types.js';
 
-type ManualProfile = WearableProfileMutation & Partial<Pick<ProfileData, 'biometrics' | 'manualMetricTombstones'>>;
+type ManualProfile = WearableProfileMutation & Partial<Pick<ProfileData, 'biometrics' | 'manualMetricTombstones' | 'manualBodyReadings'>>;
 interface ManualReadingContext { date?: string; tags?: unknown; note?: unknown }
 interface ManualMetricReading extends ManualReadingContext { value?: unknown; unit?: string }
 interface ManualBloodPressure extends ManualReadingContext { systolic?: unknown; diastolic?: unknown; pulse?: unknown }
@@ -52,7 +53,11 @@ async function _mergeManualRow(profileId: string, date: string, patch: Record<st
     for (const metric of MANUAL_METRICS) {
       if (isManualMetricTombstoned(metric, date, imported)) delete base[metric];
     }
-    const merged = { ...base, source: 'manual', date, ...patch };
+    const clocks = base._manualSyncAt && typeof base._manualSyncAt === 'object' ? {...base._manualSyncAt as Record<string, unknown>} : {};
+    const updatedAt = Date.now();
+    for (const field of MANUAL_MIRROR_FIELDS) if (Object.hasOwn(patch, field)) clocks[field] = updatedAt;
+    mirrorManualPatch(imported, date, patch, updatedAt);
+    const merged = { ...base, _manualSyncAt: clocks, source: 'manual', date, ...patch };
     await upsertDaily(profileId, merged);
   });
 }
@@ -74,9 +79,56 @@ export const MANUAL_TAGS = ['resting', 'morning-fasted', 'post-workout', 'stress
 // One-time migration flag key in the wearables meta store.
 const MIGRATION_FLAG = 'biometrics-migrated-v1';
 const MANUAL_TOMBSTONE_FIELD = 'manualMetricTombstones';
-const MANUAL_HISTORY_START = '1970-01-01';
-const MANUAL_HISTORY_END = '9999-12-31';
+export const MANUAL_HISTORY_START = '1970-01-01';
+export const MANUAL_HISTORY_END = '9999-12-31';
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const MANUAL_MIRROR_FIELD = 'manualBodyReadings';
+export const MANUAL_MIRROR_FIELDS = [...MANUAL_METRICS, 'tags', 'note'];
+export const manualMirrorKey = (field: string, date: string) => `${field}.${date}`;
+export function manualMirror(imported: ManualProfile): Record<string, ManualBodyReading> {
+  const mirror = imported.manualBodyReadings;
+  return mirror && typeof mirror === 'object' && !Array.isArray(mirror) ? mirror : (imported.manualBodyReadings = {});
+}
+/** Accept only the explicit manual surface, never vendor/imported row fields. */
+export function parseManualMirrorEntry(key: string, raw: unknown) {
+  const dot = key.indexOf('.'), field = key.slice(0, dot), date = key.slice(dot + 1);
+  if (dot < 1 || !MANUAL_MIRROR_FIELDS.includes(field) || !ISO_DAY_RE.test(date)
+      || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date
+      || !raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const entry = raw as ManualBodyReading;
+  if (!Number.isFinite(entry.updatedAt) || entry.updatedAt < 0) return null;
+  const value = entry.value;
+  if (value !== null && (MANUAL_METRICS.includes(field) ? typeof value !== 'number' || !Number.isFinite(value)
+    : field === 'note' ? typeof value !== 'string' || value.length > 500
+    : !Array.isArray(value) || value.length > MANUAL_TAGS.length || value.some(tag => !MANUAL_TAGS.includes(tag)))) return null;
+  return {field, date, value, updatedAt: entry.updatedAt};
+}
+/** A portable manual surface must contain a valid explicit measurement or deletion. */
+export function hasManualBodyReadings(value: unknown): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.entries(value).some(([key, raw]) => {
+      const entry = parseManualMirrorEntry(key, raw);
+      return !!entry && MANUAL_METRICS.includes(entry.field);
+    });
+}
+export function mirrorManualPatch(imported: ManualProfile, date: string, patch: Record<string, unknown>, updatedAt: number) {
+  const mirror = manualMirror(imported);
+  for (const field of MANUAL_MIRROR_FIELDS) {
+    if (!Object.hasOwn(patch, field)) continue;
+    const key = manualMirrorKey(field, date);
+    const entry = patch[field] === null ? {value: null, updatedAt} : {...mirror[key], value: patch[field], updatedAt};
+    if (parseManualMirrorEntry(key, entry)) mirror[key] = entry as ManualBodyReading;
+  }
+}
+function unmirrorManualMetric(imported: ManualProfile, metric: string, date: string, existing: StoredWearableRow | null) {
+  // Explicit null entries retain a per-field edit clock; an empty local store never deletes anything.
+  mirrorManualPatch(imported, date, {[metric]: null}, Date.now());
+  const mirror = manualMirror(imported);
+  if (!MANUAL_METRICS.some(field => field !== metric && (mirror[manualMirrorKey(field, date)]?.value != null || existing?.[field] != null))) {
+    mirrorManualPatch(imported, date, {tags: null, note: null}, Date.now());
+  }
+}
+
 
 export function manualMetricTombstoneKey(metric: unknown, date: unknown) {
   if (!MANUAL_METRICS.includes(metric as string) || typeof date !== 'string'
@@ -92,20 +144,20 @@ function _manualMetricTombstones(imported: ManualProfile | null | undefined) {
   return imported[MANUAL_TOMBSTONE_FIELD];
 }
 
-export function isManualMetricTombstoned(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
+export function manualMetricDeletionClock(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
   const key = manualMetricTombstoneKey(metric, date);
-  if (!key) return false;
+  if (!key) return 0;
   const tombstones = imported?.[MANUAL_TOMBSTONE_FIELD];
-  if (!tombstones || typeof tombstones !== 'object') return false;
+  if (!tombstones || typeof tombstones !== 'object') return 0;
   // An exact zero is an intentional re-add and wins over an earlier
   // delete-all marker. Otherwise the metric-wide marker protects dates this
   // device never had locally and therefore could not enumerate at deletion.
-  if (Object.prototype.hasOwnProperty.call(tombstones, key)) {
-    return Number.isFinite(Number(tombstones[key])) && Number(tombstones[key]) > 0;
-  }
   const allKey = manualMetricTombstoneKey(metric, 'all');
-  const allValue = allKey ? tombstones[allKey] : 0;
-  return Number.isFinite(Number(allValue)) && Number(allValue) > 0;
+  const value = Number(Object.hasOwn(tombstones, key) ? tombstones[key] : allKey ? tombstones[allKey] : 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+export function isManualMetricTombstoned(metric: unknown, date: unknown, imported: ManualProfile | null | undefined = state.importedData) {
+  return manualMetricDeletionClock(metric, date, imported) > 0;
 }
 
 function _recordManualMetricTombstone(metric: unknown, date: unknown, deletedAt: unknown, imported: ManualProfile) {
@@ -247,7 +299,7 @@ export async function reconcileManualMetricTombstones(profileId: string, importe
   return { prunedRows, prunedLegacy };
 }
 
-function captureManualMutation(profileId: string) {
+export function captureManualMutation(profileId: string) {
   if (!profileId || profileId !== state.currentProfile || !state.importedData) {
     throw new Error('Switch back to the originating profile before changing manual measurements.');
   }
@@ -255,13 +307,13 @@ function captureManualMutation(profileId: string) {
   return { baseData, imported: structuredClone(baseData) };
 }
 
-async function persistManualMutation(profileId: string, imported: ManualProfile, baseData: ManualProfile) {
-  if (!await saveImportedDataForProfile(profileId, imported, { baseData })) {
+export async function persistManualMutation(profileId: string, imported: ManualProfile, baseData: ManualProfile, options: Pick<ProfileSaveOptions, 'expectedData' | 'notifyOnStaleSnapshot'> = {}) {
+  if (!await saveImportedDataForProfile(profileId, imported, { baseData, ...options })) {
     throw new Error('Could not save manual measurement metadata. Check your data before retrying.');
   }
 }
 
-function updateManualConnection(imported: ManualProfile, coverageDays = 0) {
+export function updateManualConnection(imported: ManualProfile, coverageDays = 0) {
   if (!imported.wearableConnections) imported.wearableConnections = {};
   const prev = imported.wearableConnections.manual;
   const nowISO = new Date().toISOString();
@@ -468,6 +520,8 @@ export async function deleteManualMetric(profileId: string, metric: string, date
   const { imported, baseData } = captureManualMutation(profileId);
   _recordManualMetricTombstone(metric, date, Date.now(), imported);
   _removeLegacyBiometric(metric, date, imported);
+  const existingForContext = await getDaily(profileId, 'manual', date);
+  unmirrorManualMetric(imported, metric, date, existingForContext);
   // Commit deletion intent before erasing local rows, so other devices and
   // recovery retain the deletion even if wearable storage fails afterwards.
   await persistManualMutation(profileId, imported, baseData);
@@ -525,6 +579,9 @@ export async function deleteAllManualMetrics(profileId: string) {
     if (Array.isArray(biometrics.weight)) biometrics.weight = [];
     if (Array.isArray(biometrics.pulse)) biometrics.pulse = [];
     if (Array.isArray(biometrics.bp)) biometrics.bp = [];
+  }
+  for (const key of Object.keys(manualMirror(imported))) {
+    imported.manualBodyReadings![key] = {value: null, updatedAt: deletedAt};
   }
   if (imported.wearableConnections) delete imported.wearableConnections.manual;
   await persistManualMutation(profileId, imported, baseData);

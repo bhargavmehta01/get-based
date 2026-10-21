@@ -555,6 +555,7 @@ Preserve independently failing assertions for these workflows:
 
 | Workflow | Required behavior | Selected regression sources |
 | --- | --- | --- |
+| Manual body reading Sync | Sync only explicit manual weight/BP/pulse fields; preserve distinct same-day values, edit clocks, deletion/re-add, add-only local history, profile/owner guards and ordinary startup catch-up; keep vendor histories local | [Store and row codec](../tests/manual-body-readings-sync.test.ts), [ownership/failure](../tests/manual-body-readings-ownership.test.ts), [startup/detail browser](../tests/playwright/manual-readings-sync.spec.ts) |
 | Lab import and restore | Reject invalid or duplicate mutations; retain units, provenance, and unrelated data; recover from failed writes | [Import integrity](../tests/import-data-integrity.test.ts), [provenance](../tests/import-provenance.test.ts) |
 | Profiles and notes | Late work stays with its originating profile; failed reads block saves; drafts and records survive failed writes | [Profile races](../tests/chat-profile-races.test.ts), [profile persistence](../tests/profile-persistence.test.ts), [notes](../tests/notes-safety.test.ts) |
 | PDF preflight presentation | Preserve literal labels, whitespace, native button defaults, model conversion order, duplicate date formatting, specialty link attributes and scoped style ownership; retain ordered checks, cancellation and explicit model switching; create an accessible scanned-warning host when absent, keep Escape active after Tab, settle and clean up once, and protect a visible native confirmation | [Frozen presentation contracts](../tests/pdf-preflight-presentation.test.ts), [public PDF workflows](../tests/playwright/pdf-import-browser-coverage.spec.ts), [real-parser image-warning lifecycle](../tests/playwright/pdf-image-mode-lifecycle.spec.ts), [static PDF first use and cold launches](../tests/pwa/sveltekit-pdf-preflight.spec.ts), [modal lifecycle contracts](../tests/test-modal-lifecycle-integrations.ts) |
@@ -858,8 +859,14 @@ current nonpaint Chart configuration, callbacks, DOM, profile, storage, cache,
 device, focus, action and event/POST chronology remain checked against the
 authenticated native receipts. The existing 240-second case deadline and 64 MiB
 per-journey raw-pixel cap, eighteen unique ordered states and browser matrix
-remain unchanged. Portable fixture, ordering, one-byte pixel, geometry and paint
-corruption controls exercise these boundaries.
+remain unchanged. Manual-reading Sync adds a separately authored exact expectation
+for the twelve legacy mirror entries, accepted writes/deletion tombstones, per-field
+clocks and one backfill metadata record. Complete profile objects, committed JSON
+strings and device receipts still use full equality; unrelated historical fields
+and all frozen fixture bytes remain unchanged. The expected additions come from
+the fixed synthetic journey, never observed candidate output or runtime mirror
+helpers. Portable fixture, ordering, one-byte pixel, geometry and paint corruption
+controls exercise these boundaries.
 
 Wearables historical dataset coordinates remain authenticated and are reported
 when the current platform differs. Their active expectation is the independently

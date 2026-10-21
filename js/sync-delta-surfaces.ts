@@ -51,6 +51,8 @@ export const DELTA_MAPS = [
   // stop another device (or a legacy biometrics migration) resurrecting a
   // reading after the user deletes it.
   'manualMetricTombstones',
+  // Explicit manual body readings only; raw vendor histories remain device-local.
+  'manualBodyReadings',
   'refOverrides',
   'categoryLabels',
   'categoryIcons',
