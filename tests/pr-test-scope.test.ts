@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { createCiPlan, nativeLaneCommand } from '../scripts/ci-plan.mjs';
 import { createTestPlan, fileReferences, testCommands, validationCommands, kitMatrixArguments, additivePrecacheModules } from '../scripts/pr-test-scope.mjs';
 
 const fixture = (extra?: Record<string, string>) => new Map(Object.entries({
@@ -552,4 +553,24 @@ it('retains the exact native consumers of a changed helper alongside unrelated b
   ]), [helper, 'js/main.ts']);
   expect(plan.browser).toEqual([native, 'tests/playwright/unrelated.spec.ts']);
   expect(plan.nativeRequired).toEqual([native]);
+});
+
+
+describe('changed native PWA server consumers', () => {
+  it.each(['tests/pwa/app-server.ts', 'tests/pwa/app-server.js'])('retains native imports of %s even when the PWA rule also selects shipping cases', changed => {
+    const consumers = ['tests/pwa/lifecycle.spec.ts', 'tests/pwa/settings-display-pilot.spec.ts'];
+    const files = ['tests/pwa/app-server.ts', ...consumers];
+    const sources = new Map(files.map(file => [file, fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8')]));
+    sources.set('tests/pwa/sveltekit.spec.ts', '');
+    sources.set('tests/pwa/unrelated.spec.ts', '');
+    const affected = createTestPlan(sources, [changed]);
+    expect(affected.kit).toEqual(['tests/pwa/sveltekit.spec.ts']);
+    expect(affected.pwa).toEqual([...consumers, 'tests/pwa/unrelated.spec.ts']);
+    expect(affected.nativeRequired).toEqual(consumers);
+    const plan = createCiPlan(false, affected);
+    expect(plan.nativeMatrix.include.map(lane => lane.suite)).toEqual(['pwa', 'display']);
+    const lane = plan.nativeMatrix.include.find(lane => lane.suite === 'pwa')!;
+    expect(nativeLaneCommand(plan, lane.id).command).toEqual(['playwright', 'test', ...consumers, '--config=playwright.pwa.config.js', '--shard=1/1']);
+    expect(plan.deferred.native).toEqual(['tests/pwa/unrelated.spec.ts']);
+  });
 });

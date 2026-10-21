@@ -325,7 +325,7 @@ export function createTestPlan(sources: Map<string, string>, changedFiles: strin
   // has no selected shipping consumer. Runnable test entries remain graph sinks.
   const nativeRequired = new Set<string>();
   for (const file of roots) {
-    const nativeHelper = /^tests\/(?:helpers\/|(?:playwright|firefox|pwa)\/.*(?:fixture|helper|support)[^/]*\.[cm]?js$)/.test(runtimePath(file)) && !isTestEntry(file);
+    const nativeHelper = /^tests\/(?:helpers\/|(?:playwright|firefox|pwa)\/.*(?:fixture|helper|server|support)[^/]*\.[cm]?js$)/.test(runtimePath(file)) && !isTestEntry(file);
     if (!nativeHelper && !/^(js\/|lib\/|api\/|server\/|scripts\/).*\.(?:[cm]?[jt]s|svelte)$/.test(file) && !ownedVendor.has(file)) continue;
     const visited = new Set<string>(), pending = [file], native = new Set<string>();
     let shipping = false;
