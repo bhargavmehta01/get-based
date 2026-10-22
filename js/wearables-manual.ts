@@ -37,6 +37,7 @@ import { isoDay } from './wearable-adapters.js';
 import { weightToKilograms } from './wearables-formatters.js';
 import { syncWearableSummary } from './wearables-summary.js';
 import { queueManualRowWrite } from './wearables-manual-lock.js';
+import { BODY_MEASUREMENT_FIELDS, bodyMeasurementRecords, measurementPatch, validMeasurementDate, type BodyMeasurementDraft } from './body-measurement-model.js';
 
 // Merge helper — read the existing manual row for `date` (if any), shallow-merge
 // the new patch on top, write back. Needed because IDB `put` replaces the whole
@@ -62,10 +63,9 @@ async function _mergeManualRow(profileId: string, date: string, patch: Record<st
   });
 }
 
-// Canonical metrics manual entry covers. All four already exist in
-// CANONICAL_METRICS (wearable-adapters.js) — this list just scopes what the
-// manual UI exposes for entry.
-export const MANUAL_METRICS = ['weight', 'bp_systolic', 'bp_diastolic', 'rhr'];
+// Numeric manual fields. Waist/hip/SAD fields encode their measurement method;
+// their overview cards project the explicit mirror without pooling methods.
+export const MANUAL_METRICS = ['weight', 'bp_systolic', 'bp_diastolic', 'rhr', ...BODY_MEASUREMENT_FIELDS];
 
 // Optional context tags a user can attach to a reading. Sensors can't infer
 // these — a BP of 140/90 means wildly different things "resting first thing
@@ -369,6 +369,29 @@ export async function logManualMetric(profileId: string, metric: string, { date,
   await persistManualMutation(profileId, imported, baseData);
 }
 
+/** Waist and optional hips commit together; each posture/site keeps its own clock. */
+export async function logBodyMeasurement(profileId: string, draft: BodyMeasurementDraft) {
+  const patch = measurementPatch(draft);
+  if (draft.date > isoDay()) throw new Error('Choose today or an earlier date.');
+  const original = draft.original;
+  if (original && (!validMeasurementDate(original.date) || !BODY_MEASUREMENT_FIELDS.includes(original.field)
+    || (draft.kind === 'waist' ? !original.field.startsWith('waist_') : original.field !== 'sad_supine_iliac'))) throw new Error('Unknown original body measurement.');
+  const {imported, baseData} = captureManualMutation(profileId);
+  const moved = original && (original.date !== draft.date || !Object.hasOwn(patch, original.field));
+  if (moved) {
+    if (bodyMeasurementRecords(imported, draft.kind).some(row => row.date === draft.date && Object.hasOwn(patch, row.field))) {
+      throw new Error('A measurement already exists for that date and method. Edit it in History instead.');
+    }
+    await stageBodyMeasurementDeletion(imported, profileId, original.field, original.date, original.date === draft.date);
+  }
+  for (const field of Object.keys(patch)) _clearManualMetricTombstone(field, draft.date, imported);
+  await _mergeManualRow(profileId, draft.date, patch, imported);
+  updateManualConnection(imported);
+  // A correction publishes the new pair and the old pair's deletion together.
+  await persistManualMutation(profileId, imported, baseData);
+  if (moved) await eraseBodyMeasurementRowFields(profileId, original.field, original.date);
+}
+
 /**
  * Log BP as a pair — matches how home cuffs report systolic + diastolic
  * (+ optional pulse) in a single reading. One row per date.
@@ -541,6 +564,41 @@ export async function deleteManualMetric(profileId: string, metric: string, date
       await deleteDaily(profileId, 'manual', date);
     }
   });
+}
+
+function bodyMeasurementPair(field: string): string[] {
+  if (!BODY_MEASUREMENT_FIELDS.includes(field) || field.startsWith('hip_')) throw new Error('Unknown body measurement.');
+  return field.startsWith('waist_') ? [field, field.replace(/^waist_/, 'hip_')] : [field];
+}
+async function stageBodyMeasurementDeletion(imported: ManualProfile, profileId: string, field: string, date: string, preserveContext = false) {
+  const fields = bodyMeasurementPair(field), existing = await getDaily(profileId, 'manual', date);
+  const deletedAt = Date.now();
+  for (const metric of fields) _recordManualMetricTombstone(metric, date, deletedAt, imported);
+  mirrorManualPatch(imported, date, Object.fromEntries(fields.map(metric => [metric, null])), deletedAt);
+  const mirror = manualMirror(imported);
+  if (!preserveContext && !MANUAL_METRICS.some(metric => !fields.includes(metric) && !isManualMetricTombstoned(metric, date, imported)
+    && (mirror[manualMirrorKey(metric, date)] ? mirror[manualMirrorKey(metric, date)]!.value != null : existing?.[metric] != null))) {
+    mirrorManualPatch(imported, date, {note: null, tags: null}, deletedAt);
+  }
+}
+async function eraseBodyMeasurementRowFields(profileId: string, field: string, date: string) {
+  const fields = bodyMeasurementPair(field);
+  return queueManualRowWrite(profileId, async () => {
+    const existing = await getDaily(profileId, 'manual', date);
+    if (!existing) return;
+    const next = {...existing};
+    for (const metric of fields) delete next[metric];
+    if (MANUAL_METRICS.some(metric => next[metric] != null)) await upsertDaily(profileId, next);
+    else await deleteDaily(profileId, 'manual', date);
+  });
+}
+/** Delete a method-specific waist/hip pair with one portable deletion commit. */
+export async function deleteBodyMeasurement(profileId: string, field: string, date: string) {
+  if (!validMeasurementDate(date)) throw new Error('Choose a valid measurement date.');
+  const {imported, baseData} = captureManualMutation(profileId);
+  await stageBodyMeasurementDeletion(imported, profileId, field, date);
+  await persistManualMutation(profileId, imported, baseData);
+  await eraseBodyMeasurementRowFields(profileId, field, date);
 }
 
 /**
