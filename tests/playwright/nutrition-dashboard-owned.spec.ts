@@ -10,8 +10,8 @@ async function navigate(page: import('@playwright/test').Page, route: string) {
   await page.locator(`.nav-item[data-category="${route}"]`).click();
   await expect(page.locator('[data-nutrition-dashboard-view="intake"]')).toBeVisible();
 }
-test('authored nutrition widgets preserve Dashboard and Body actions and refreshed values', async ({ page }) => {
-  for (const route of ['dashboard', 'body']) {
+test('authored nutrition widgets preserve Dashboard and Nutrition actions and refreshed values', async ({ page }) => {
+  for (const route of ['dashboard', 'nutrition']) {
     await navigate(page, route); const widget = page.locator('[data-nutrition-dashboard-view="intake"]');
     await expect(widget).toContainText('2 of 7 days'); await expect(widget).toContainText('38 g recorded · 128 guide');
     await expect(page.locator('[data-nutrition-dashboard-view="fuel"] .nutrition-fuel-meta')).toContainText('2 of 2 meals included');
@@ -29,7 +29,7 @@ test('authored nutrition widgets preserve Dashboard and Body actions and refresh
   }
 });
 test('authored nutrition dashboard widgets fit their containers across themes and pass accessibility', async ({ page }) => {
-  test.setTimeout(120000); await navigate(page, 'body');
+  test.setTimeout(120000); await navigate(page, 'nutrition');
   await page.evaluate(async () => { const link=document.createElement('link'); link.rel='stylesheet'; link.href='/themes-extra.css'; const ready=new Promise<void>((resolve,reject)=>{link.onload=()=>resolve();link.onerror=()=>reject(new Error('Themes unavailable'));});document.head.append(link);await ready; });
   for (const width of [320, 1100]) for (const theme of ['dark','light','cyberterm','glass','neuromancer','synth-sunrise']) {
     await page.setViewportSize({width,height:900}); await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
