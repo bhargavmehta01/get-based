@@ -9,7 +9,8 @@ import { addUtilsRuntimeListener } from './utils-runtime.js';
 import { showNotification, showConfirmDialog, isDebugMode, setPIIReviewEnabled, bindSyncAppliedRefresh } from './utils.js';
 import { resetProfileUsage } from './schema.js';
 import { loadPdfImport } from './import-loader.js';
-import { refreshDataEntriesView, refreshAIUsageView } from './settings-records-component.js';
+import { refreshDataEntriesView, refreshAIUsageView, refreshAutoImportFeedView } from './settings-records-component.js';
+import { clearAutoImportHistory, normalizeAutoImportFeedUrl, saveAutoImportFeedUrl } from './auto-import-feed.js';
 import {
   getDeletedImportBenchmarkIds,
   getImportBenchmarks,
@@ -27,6 +28,34 @@ export function renderDataEntriesSection(): string {
   return '<div id="data-entries-content"></div>';
 }
 export function refreshDataEntriesSection(): void { refreshDataEntriesView(); }
+
+export function saveAutoImportFeedFromSettings(): void {
+  const field = document.getElementById('auto-import-feed-url') as HTMLInputElement | null;
+  const url = normalizeAutoImportFeedUrl(field?.value ?? '', globalThis.location?.href || 'http://localhost/');
+  if (url === null) { showNotification('Enter an http(s) feed URL, or leave it empty to turn auto-import off.', 'error'); return; }
+  if (!saveAutoImportFeedUrl(state.currentProfile, url)) { showNotification('Could not save the auto-import source.', 'error'); return; }
+  refreshAutoImportFeedView();
+  showNotification(url ? 'Auto-import source saved. It is checked when the app opens.' : 'Auto-import turned off.', 'success');
+}
+
+export async function checkAutoImportFeedFromSettings(): Promise<void> {
+  try {
+    const { checkAutoImportFeed } = await import('./auto-import-feed-runtime.js');
+    await checkAutoImportFeed({ interactive: true });
+  } catch (err) {
+    if (isDebugMode()) console.error('Auto-import check failed:', err);
+    showNotification('Auto-import: could not check the configured source.', 'error');
+  }
+  refreshAutoImportFeedView();
+  refreshDataEntriesView();
+}
+
+export async function clearAutoImportHistoryFromSettings(): Promise<void> {
+  const confirmed = await showConfirmDialog('Forget which feed reports were already imported or skipped? They will be offered for review again on the next check.', { confirmLabel: 'Forget', tone: 'primary' });
+  if (!confirmed) return;
+  clearAutoImportHistory(state.currentProfile);
+  refreshAutoImportFeedView();
+}
 
 export async function removeImportedEntryFromSettings(date: unknown) {
   try {

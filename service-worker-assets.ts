@@ -197,6 +197,7 @@ const APP_SHELL = [ // Includes dynamic chat and Knowledge Base modules for firs
   '/js/backup-folder-component.js', '/js/settings-protection-contract.js', '/js/settings-protection-view.js', '/js/settings-protection-classes.js',
   '/js/settings-protection-component.js', '/js/agent-access-legacy-source.js', '/js/settings-records-classes.js', '/js/settings-records-contract.js',
   '/js/settings-records-view.js', '/js/settings-records-component.js', '/js/components/DataEntriesSettings.svelte.native.js', '/js/components/AIUsageSettings.svelte.native.js',
+  '/js/components/AutoImportFeedSettings.svelte.native.js', '/js/auto-import-feed.js', '/js/auto-import-feed-runtime.js',
   '/js/settings-agent-access-classes.js', '/js/settings-agent-access-contract.js', '/js/settings-agent-access-component.js', '/js/components/AgentAccessSettings.svelte.native.js',
   '/js/feedback.js', '/js/feedback-classes.js', '/js/feedback-rendering.js', '/js/components/FeedbackPresentation.svelte.html.js',
   '/js/tour-runtime.js', '/js/tour.js', '/js/changelog.js', '/js/changelog-state.js',

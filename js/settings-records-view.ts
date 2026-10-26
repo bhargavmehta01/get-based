@@ -3,7 +3,8 @@ import { state } from './state.js';
 import { isSnapshotDerivedHOMAIR } from './lab-entry.js';
 import { formatCost, getProfileUsage, getGlobalUsage } from './schema.js';
 import type { StoredProfileRecord } from './profile-list-store.js';
-import type { DataEntriesSnapshot, AIUsageSnapshot, UsageRowView } from './settings-records-contract.js';
+import type { DataEntriesSnapshot, AIUsageSnapshot, UsageRowView, AutoImportFeedSnapshot } from './settings-records-contract.js';
+import { readAutoImportFeedConfig } from './auto-import-feed.js';
 
 interface StoredImportRecord {
   id?: unknown; date?: unknown; markerCount?: unknown; markers?: readonly unknown[];
@@ -56,4 +57,14 @@ export function getAIUsageSnapshot(): AIUsageSnapshot {
   const profiles: readonly StoredProfileRecord[] = state.profiles || [];
   const name = text(profiles.find(item => item.id === state.currentProfile)?.name || 'Current profile');
   return { profile: usageRow(name, profile), global: usageRow('All profiles', getGlobalUsage()), canReset: profile.requestCount > 0 };
+}
+
+export function getAutoImportFeedSnapshot(): AutoImportFeedSnapshot {
+  const config = readAutoImportFeedConfig(state.currentProfile);
+  const checked = config.lastCheckedAt ? new Date(config.lastCheckedAt) : null;
+  const when = checked && !Number.isNaN(checked.getTime())
+    ? checked.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : '';
+  const status = !config.url ? 'Off' : config.lastStatus ? `${config.lastStatus}${when ? ` · ${when}` : ''}` : 'Not checked yet';
+  return { url: config.url, configured: Boolean(config.url), status, doneCount: config.doneIds.length };
 }

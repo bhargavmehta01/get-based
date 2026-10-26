@@ -6,6 +6,7 @@
 @source "../js/components/AgentAccessSettings.svelte";
 @source "../js/components/AiActionDialog.svelte";
 @source "../js/components/AiSettings.svelte";
+@source "../js/components/AutoImportFeedSettings.svelte";
 @source "../js/components/BackupSettings.svelte";
 @source "../js/components/CliAgentModels.svelte";
 @source "../js/components/CliAgentSettings.svelte";

@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { state } from '../js/state.js';
 import { disposeSettingsRecords, mountSettingsRecords } from '../js/settings-records-component.js';
 import { getDataEntriesSnapshot, getAIUsageSnapshot } from '../js/settings-records-view.js';
-import { renderDataEntriesSection, renderAIUsageSection, refreshDataEntriesSection, resetCurrentProfileUsage } from '../js/settings-data.js';
+import { renderDataEntriesSection, renderAIUsageSection, refreshDataEntriesSection, resetCurrentProfileUsage, saveAutoImportFeedFromSettings } from '../js/settings-data.js';
+import { readAutoImportFeedConfig, markAutoImportItemsDone } from '../js/auto-import-feed.js';
 
 const originalData = state.importedData;
 const originalProfiles = state.profiles;
@@ -23,6 +24,27 @@ afterEach(() => {
 });
 
 describe('Settings imported records and usage', () => {
+  it('shows the optional auto-import source off by default and saves a normalized address per profile', () => {
+    document.body.innerHTML = '<section id="auto-import-feed-section"><div id="auto-import-feed-content"></div></section>';
+    mountSettingsRecords();
+    const field = document.getElementById('auto-import-feed-url') as HTMLInputElement;
+    expect(field.value).toBe('');
+    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Status: Off');
+    expect((document.querySelector('[data-settings-action="check-auto-import-feed"]') as HTMLButtonElement).disabled).toBe(true);
+    field.value = 'javascript:alert(1)';
+    saveAutoImportFeedFromSettings();
+    expect(readAutoImportFeedConfig('records-test').url).toBe('');
+    field.value = ' /inbox/feed.json ';
+    saveAutoImportFeedFromSettings();
+    expect(readAutoImportFeedConfig('records-test').url).toBe(new URL('/inbox/feed.json', location.href).href);
+    expect(readAutoImportFeedConfig('other-profile').url).toBe('');
+    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Status: Not checked yet');
+    expect((document.querySelector('[data-settings-action="check-auto-import-feed"]') as HTMLButtonElement).disabled).toBe(false);
+    markAutoImportItemsDone('records-test', ['a']);
+    mountSettingsRecords();
+    expect(document.querySelector('[data-settings-action="clear-auto-import-history"]')!.textContent).toContain('Forget 1 handled report');
+  });
+
   it('keeps empty and tombstone-only states free of destructive/export controls', () => {
     mountPanels();
     expect(document.getElementById('data-entries-section')!.textContent).toContain('No data yet');

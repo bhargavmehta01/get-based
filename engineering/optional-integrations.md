@@ -39,6 +39,23 @@ backups independently of the browser.
   at Copernicus or Open-Meteo. Missing weather fields fall back browser-direct
   to Open-Meteo with the same rounded location. This is limited plaintext
   processing, not end-to-end encryption.
+- **Auto-import source:** off by default. In Settings → Data → Auto-import
+  Source a user can enter the address of a JSON feed of PDF lab reports, for
+  example one published by a self-hosted document manager such as
+  Paperless-ngx. Only when an address is saved does the app request the feed,
+  on app open and on **Check now**, and then download the PDF reports it lists.
+  The feed origin (and any origin hosting the listed PDFs) therefore receives
+  those requests and their network metadata; no credentials are attached to
+  cross-origin requests. Addresses must be HTTPS, except plain HTTP on the
+  app's own origin or loopback. New reports enter the normal AI-assisted import
+  and review, so they reach the configured AI provider like a manually dropped
+  PDF and nothing is saved until the user confirms the review. The feed address
+  and the ids of reports already imported or skipped are stored per profile in
+  local browser storage. Feed format:
+  `{"items":[{"id":"…","title":"…","url":"…","created":"<ISO date>"}]}`, with
+  `url` resolved against the feed address and serving `application/pdf`.
+  Feed servers should send `Cache-Control: no-store`; the service worker does
+  not copy such responses into the offline cache.
 - **Hosted analytics:** cookieless pageview and outbound affiliate-click counts
   are on by default, disclosed at first use and switchable in Settings → Privacy.
   They contain no health records, identity or health context.

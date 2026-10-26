@@ -12,3 +12,6 @@ export interface DataEntriesSnapshot {
 export interface UsageRowView { label: string; cost: string; requests: string; tokens: string }
 export interface AIUsageSnapshot { profile: UsageRowView; global: UsageRowView; canReset: boolean }
 export interface SettingsRecordsView<T> { refresh(snapshot: T): void }
+export interface AutoImportFeedSnapshot {
+  url: string; configured: boolean; status: string; doneCount: number;
+}
