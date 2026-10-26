@@ -618,11 +618,23 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
   }
 }
 
-export async function handleBatchPDFs(pdfFiles: File[]) {
+/** Final per-file outcome of a batch import. `imported` means the reviewed result was saved. */
+export type BatchPDFOutcome = 'imported' | 'skipped' | 'failed';
+export interface BatchPDFOptions {
+  /** Called once per file after its final attempt (including the retry pass). */
+  onFileResult?: (file: File, outcome: BatchPDFOutcome) => void;
+}
+
+export async function handleBatchPDFs(pdfFiles: File[], options: BatchPDFOptions = {}) {
   if (!hasAssistantFeatureProvider()) {
     showAINeededDialog('import');
     return;
   }
+  // Report each file as soon as its outcome is final, so an interrupted batch
+  // still records the files that were already saved or dismissed.
+  const report = (file: File, outcome: BatchPDFOutcome) => {
+    try { options.onFileResult?.(file, outcome); } catch (_) { /* observers never affect the import */ }
+  };
   setPdfImportBatchMode(true);
   const ollama = await checkOllamaPII();
   let imported = 0, skipped = 0, failed = 0;
@@ -634,6 +646,7 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
       if (result === 'imported') imported++;
       else if (result === 'skipped') skipped++;
       else if (result === 'empty' || result === 'pii-fail' || result === 'no-markers') failed++;
+      report(file, result === 'imported' || result === 'skipped' ? result : 'failed');
     } catch (err) {
       logPrivacyDiagnostic('batch-import-failed', {
         fileIndex: i + 1,
@@ -656,6 +669,7 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
         if (result === 'imported') { retryImported++; imported++; }
         else if (result === 'skipped') skipped++;
         else failed++;
+        report(file, result === 'imported' || result === 'skipped' ? result : 'failed');
       } catch (err) {
         logPrivacyDiagnostic('batch-retry-failed', {
           fileIndex: i + 1,
@@ -664,6 +678,7 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
         });
         retryFailed++;
         failed++;
+        report(file, 'failed');
       }
       if (i < failedFiles.length - 1) await new Promise(r => setTimeout(r, 3000));
     }
