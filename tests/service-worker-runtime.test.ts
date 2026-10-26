@@ -244,6 +244,26 @@ describe('service worker runtime cache behavior', () => {
     expect(matches.get('/styles.css')).toBeDefined();
   });
 
+  it('never copies no-store same-origin responses into the app cache', async () => {
+    const fetchImpl = vi.fn(async (request: string | Request) => {
+      const href = typeof request === 'string' ? request : request.url;
+      if (href.endsWith('/api/commit')) return jsonResponse({ sha: 'deadbeefcafebabe' });
+      if (href.includes('/inbox/')) return new Response('%PDF-1.4', { status: 200, headers: { 'Cache-Control': 'private, no-store' } });
+      return new Response(`network:${href}`, { status: 200 });
+    });
+    const { listeners, cache } = await loadServiceWorker({ fetchImpl });
+    const live = makeFetchEvent('https://preview.getbased.health/inbox/doc/1.pdf');
+    listeners.get('fetch')!(live);
+    expect(await (await live.response()!).text()).toBe('%PDF-1.4');
+    await live.done();
+    expect(cache.put).not.toHaveBeenCalledWith(live.request, expect.anything());
+
+    const asset = makeFetchEvent('https://preview.getbased.health/data/example.json');
+    listeners.get('fetch')!(asset);
+    await asset.response();
+    await vi.waitFor(() => expect(cache.put).toHaveBeenCalledWith(asset.request, expect.any(Response)));
+  });
+
   it('keeps activation alive until clients are claimed', async () => {
     const { listeners, self } = await loadServiceWorker();
     let resolveClaim: (() => void) | undefined;

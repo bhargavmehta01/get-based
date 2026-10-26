@@ -236,6 +236,9 @@ function installServiceWorkerRuntime({
 
   function cacheResponse(request: RequestInfo | URL, response: Response) {
     if (response.status === 206 || !response.ok) return Promise.resolve();
+    // Honour no-store: live same-origin data (for example an auto-import feed
+    // or its PDF reports) must never be copied into the offline app cache.
+    if (/(?:^|,)\s*no-store\s*(?:,|$)/i.test(response.headers.get('Cache-Control') || '')) return Promise.resolve();
     const clone = response.clone();
     return resolveCacheName()
       .then((name) => caches.open(name))
