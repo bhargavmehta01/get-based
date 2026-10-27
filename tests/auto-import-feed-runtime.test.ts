@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { state } from '../js/state.js';
 import { markAutoImportItemsDone, readAutoImportFeedConfig, saveAutoImportFeedUrl } from '../js/auto-import-feed.js';
-import { checkAutoImportFeed, configureAutoImportFeedRuntimeDeps, readAutoImportBody } from '../js/auto-import-feed-runtime.js';
+import { checkAutoImportFeed, configureAutoImportFeedRuntimeDeps, fetchAutoImportFeed, readAutoImportBody } from '../js/auto-import-feed-runtime.js';
 import { importDispatch } from '../js/pdf-import-progress.js';
 import type { BatchPDFOutcome } from '../js/pdf-import.js';
 
@@ -101,6 +101,23 @@ describe('auto-import feed runtime', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(handleBatchPDFs).not.toHaveBeenCalled();
     expect(readAutoImportFeedConfig('alpha').doneIds).toEqual([]);
+  });
+
+  it('marks only same-origin requests for the service worker network pass-through', async () => {
+    const seen: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({ url: String(input), init });
+      return feedResponse([]);
+    });
+    install({ fetch: fetchMock as unknown as typeof fetch });
+    const sameOrigin = new URL('/inbox/feed.json', location.href).href;
+    await fetchAutoImportFeed(sameOrigin);
+    await fetchAutoImportFeed(FEED);
+    expect(seen.map(entry => entry.url)).toEqual([sameOrigin, FEED]);
+    for (const entry of seen) expect(entry.init?.cache).toBe('no-store');
+    expect(seen[0]?.init?.headers).toEqual({ Accept: 'application/json', 'X-GetBased-Fresh': 'auto-import' });
+    // Cross-origin requests stay simple (no preflight) and never reach the worker cache.
+    expect(seen[1]?.init?.headers).toEqual({ Accept: 'application/json' });
   });
 
   it('reports feed errors with a short notice and leaves history untouched', async () => {

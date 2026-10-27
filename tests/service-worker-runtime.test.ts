@@ -244,43 +244,51 @@ describe('service worker runtime cache behavior', () => {
     expect(matches.get('/styles.css')).toBeDefined();
   });
 
-  it('never copies no-store same-origin responses into the app cache', async () => {
-    const fetchImpl = vi.fn(async (request: string | Request) => {
-      const href = typeof request === 'string' ? request : request.url;
-      if (href.endsWith('/api/commit')) return jsonResponse({ sha: 'deadbeefcafebabe' });
-      if (href.includes('/inbox/')) return new Response('%PDF-1.4', { status: 200, headers: { 'Cache-Control': 'private, no-store' } });
-      return new Response(`network:${href}`, { status: 200 });
-    });
-    const { listeners, cache } = await loadServiceWorker({ fetchImpl });
-    const live = makeFetchEvent('https://preview.getbased.health/inbox/doc/1.pdf');
-    listeners.get('fetch')!(live);
-    expect(await (await live.response()!).text()).toBe('%PDF-1.4');
-    await live.done();
-    expect(cache.put).not.toHaveBeenCalledWith(live.request, expect.anything());
-
-    const asset = makeFetchEvent('https://preview.getbased.health/data/example.json');
-    listeners.get('fetch')!(asset);
-    await asset.response();
-    await vi.waitFor(() => expect(cache.put).toHaveBeenCalledWith(asset.request, expect.any(Response)));
-  });
-
-  it.each(['preview.getbased.health', 'app.getbased.health'])('lets no-store requests bypass worker cache reads and writes on %s', async hostname => {
+  it.each(['preview.getbased.health', 'app.getbased.health'])('sends marked auto-import requests straight to the network on %s', async hostname => {
     const { listeners, cache, matches } = await loadServiceWorker({ hostname });
     await Promise.resolve();
     matches.set('/inbox/feed.json', new Response('{"items":["stale"]}'));
     const fetchMock = vi.fn(async () => new Response('{"items":[]}', { status: 200 }));
     (globalThis as unknown as {fetch: unknown}).fetch = fetchMock;
-    const live = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { cache: 'no-store' });
+    cache.match.mockClear();
+    cache.put.mockClear();
+    const live = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { cache: 'no-store', headers: { 'X-GetBased-Fresh': 'auto-import' } });
     listeners.get('fetch')!(live);
     expect(live.response()).toBeNull();
     await live.done();
-    expect(cache.match).not.toHaveBeenCalledWith(live.request);
-    expect(cache.put).not.toHaveBeenCalledWith(live.request, expect.anything());
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
 
-    const ordinary = makeFetchEvent(`https://${hostname}/inbox/feed.json`);
-    listeners.get('fetch')!(ordinary);
-    expect(ordinary.response()).not.toBeNull();
+    // Only the exact marker value opts out; anything else is an ordinary request.
+    const other = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { headers: { 'X-GetBased-Fresh': 'yes' } });
+    listeners.get('fetch')!(other);
+    expect(other.response()).not.toBeNull();
+  });
+
+  it('keeps upstream caching for ordinary no-store requests and responses', async () => {
+    // Production: a page fetch with cache: 'no-store' is still answered from the
+    // owned app cache first, exactly as before the auto-import marker existed.
+    const production = await loadServiceWorker({ hostname: 'app.getbased.health' });
+    await Promise.resolve();
+    production.matches.set('/data/example.json', new Response('cached:example'));
+    const cachedFirst = makeFetchEvent('https://app.getbased.health/data/example.json', { cache: 'no-store' });
+    production.listeners.get('fetch')!(cachedFirst);
+    expect(await (await cachedFirst.response()!).text()).toBe('cached:example');
+
+    // Preview: network-first responses marked Cache-Control: no-store are still
+    // copied into the app cache (servers such as the test kit serve every file
+    // that way and offline launches depend on those copies).
+    const fetchImpl = vi.fn(async (request: string | Request) => {
+      const href = typeof request === 'string' ? request : request.url;
+      if (href.endsWith('/api/commit')) return jsonResponse({ sha: 'deadbeefcafebabe' });
+      return new Response(`network:${href}`, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    });
+    const preview = await loadServiceWorker({ fetchImpl });
+    const worker = makeFetchEvent('https://preview.getbased.health/js/lens-local-worker.js?mock=1', { cache: 'no-store' });
+    preview.listeners.get('fetch')!(worker);
+    expect(await (await worker.response()!).text()).toBe('network:https://preview.getbased.health/js/lens-local-worker.js?mock=1');
+    await vi.waitFor(() => expect(preview.cache.put).toHaveBeenCalledWith(worker.request, expect.any(Response)));
   });
 
   it('keeps activation alive until clients are claimed', async () => {

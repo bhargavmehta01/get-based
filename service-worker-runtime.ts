@@ -236,9 +236,6 @@ function installServiceWorkerRuntime({
 
   function cacheResponse(request: RequestInfo | URL, response: Response) {
     if (response.status === 206 || !response.ok) return Promise.resolve();
-    // Honour no-store: live same-origin data (for example an auto-import feed
-    // or its PDF reports) must never be copied into the offline app cache.
-    if (/(?:^|,)\s*no-store\s*(?:,|$)/i.test(response.headers.get('Cache-Control') || '')) return Promise.resolve();
     const clone = response.clone();
     return resolveCacheName()
       .then((name) => caches.open(name))
@@ -570,10 +567,12 @@ function installServiceWorkerRuntime({
     // Cache API only supports GET, and the app cache owns same-origin files only.
     if (event.request.method !== 'GET' || !sameOrigin) return;
 
-    // A page that asked for a fresh copy (fetch with cache: 'no-store', for
-    // example an auto-import feed check) gets the network directly: the worker
-    // neither answers from nor writes to its cache.
-    if (event.request.cache === 'no-store') return;
+    // Same-origin auto-import feed and report checks mark themselves with this
+    // exact header (js/auto-import-feed.ts) and go straight to the network:
+    // live reports are never answered from or copied into the app cache.
+    // Every other request, including ordinary no-store ones, keeps the
+    // caching behaviour below.
+    if (event.request.headers.get('X-GetBased-Fresh') === 'auto-import') return;
 
     // Bind a new document only when returning the exact current cached app
     // shell. A network navigation can race a deployment and proves no build.

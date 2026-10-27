@@ -23,6 +23,14 @@ export const AUTO_IMPORT_FEED_MAX_ENTRIES = 5000;
 export const AUTO_IMPORT_FEED_MAX_DONE_IDS = AUTO_IMPORT_FEED_MAX_ENTRIES;
 /** New reports handed to one review batch; the rest are offered on later checks. */
 export const AUTO_IMPORT_FEED_MAX_PER_CHECK = 50;
+/**
+ * Request header that marks a same-origin auto-import feed or report fetch.
+ * The service worker passes only requests carrying this exact header straight
+ * to the network, so live reports are never answered from or written to the
+ * offline app cache. Keep in sync with service-worker-runtime.ts.
+ */
+export const AUTO_IMPORT_FRESH_HEADER = 'X-GetBased-Fresh';
+export const AUTO_IMPORT_FRESH_VALUE = 'auto-import';
 const MAX_ID_LENGTH = 200;
 
 export interface AutoImportFeedItem {

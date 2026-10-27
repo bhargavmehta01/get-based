@@ -13,6 +13,8 @@ import { importDispatch } from './pdf-import-progress.js';
 import { isDropZoneImportRunning } from './import-drop-zone-runtime.js';
 import {
   AUTO_IMPORT_FEED_MAX_PER_CHECK,
+  AUTO_IMPORT_FRESH_HEADER,
+  AUTO_IMPORT_FRESH_VALUE,
   AutoImportFeedError,
   autoImportFileName,
   hasPdfSignature,
@@ -84,12 +86,17 @@ async function fetchAndRead<T>(
       reject(new AutoImportTimeoutError());
     }, timeoutMs);
   });
+  // Same-origin requests carry the marker the service worker uses to send them
+  // straight to the network. Cross-origin requests never touch the worker cache
+  // and must stay simple requests, so they get no extra header.
+  const headers: Record<string, string> = { Accept: accept };
+  if (appOrigin() !== null && originOf(url) === appOrigin()) headers[AUTO_IMPORT_FRESH_HEADER] = AUTO_IMPORT_FRESH_VALUE;
   const work = (async () => {
     const response = await deps.fetch(url, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'same-origin',
-      headers: { Accept: accept },
+      headers,
       ...(controller ? { signal: controller.signal } : {}),
     });
     // A redirect must not lead the request outside the address policy.
