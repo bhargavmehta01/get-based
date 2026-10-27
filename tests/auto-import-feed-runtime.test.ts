@@ -3,8 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { state } from '../js/state.js';
-import { readAutoImportFeedConfig, saveAutoImportFeedUrl } from '../js/auto-import-feed.js';
-import { checkAutoImportFeed, configureAutoImportFeedRuntimeDeps } from '../js/auto-import-feed-runtime.js';
+import { markAutoImportItemsDone, readAutoImportFeedConfig, saveAutoImportFeedUrl } from '../js/auto-import-feed.js';
+import { checkAutoImportFeed, configureAutoImportFeedRuntimeDeps, readAutoImportBody } from '../js/auto-import-feed-runtime.js';
+import { importDispatch } from '../js/pdf-import-progress.js';
 import type { BatchPDFOutcome } from '../js/pdf-import.js';
 
 const FEED = 'https://docs.example.test/inbox/feed.json';
@@ -52,6 +53,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  importDispatch.busy = false;
   configureAutoImportFeedRuntimeDeps(previous);
   state.currentProfile = previousProfile;
   localStorage.clear();
@@ -125,5 +128,132 @@ describe('auto-import feed runtime', () => {
     const { fetchMock } = install({ isImportRunning: () => true });
     expect(await checkAutoImportFeed()).toBe('busy');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not start a second batch when a manual import claims the lock while reports load', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const handleBatchPDFs = vi.fn(async () => {});
+    const { notify } = install({
+      loadImportUI: async () => {
+        importDispatch.busy = true; // a manual import started meanwhile
+        return { handleBatchPDFs } as never;
+      },
+    });
+    expect(await checkAutoImportFeed()).toBe('busy');
+    expect(handleBatchPDFs).not.toHaveBeenCalled();
+    expect(importDispatch.busy).toBe(true);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('offered again later'), 'info');
+    expect(readAutoImportFeedConfig('alpha').doneIds).toEqual([]);
+  });
+
+  it('holds the import lock only while its own batch runs', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const { handleBatchPDFs } = install();
+    handleBatchPDFs.mockImplementation(async () => { expect(importDispatch.busy).toBe(true); });
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(importDispatch.busy).toBe(false);
+  });
+
+  it('filters handled ids over the whole feed before applying the per-check limit', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const entries = Array.from({ length: 640 }, (_, i) => ({ id: String(i + 1), title: `R${i + 1}`, url: `/inbox/doc/${i + 1}.pdf` }));
+    markAutoImportItemsDone('alpha', entries.slice(0, 560).map(entry => entry.id));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input) === FEED ? feedResponse(entries) : pdfResponse());
+    const confirm = vi.fn(async (_message: string) => true);
+    const { handleBatchPDFs } = install({ fetch: fetchMock as unknown as typeof fetch, confirm });
+    handleBatchPDFs.mockImplementation(async (files, options) => {
+      for (const file of files) options?.onFileResult?.(file, 'imported');
+    });
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(confirm.mock.calls[0]![0]).toContain('80 new lab reports');
+    expect(confirm.mock.calls[0]![0]).toContain('oldest 50');
+    expect(handleBatchPDFs.mock.calls[0]![0].map((file: File) => file.name)[0]).toBe('R561.pdf');
+    expect(handleBatchPDFs.mock.calls[0]![0]).toHaveLength(50);
+
+    handleBatchPDFs.mockClear();
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(handleBatchPDFs.mock.calls[0]![0]).toHaveLength(30);
+    expect(handleBatchPDFs.mock.calls[0]![0][0]!.name).toBe('R611.pdf');
+    expect(await checkAutoImportFeed()).toBe('none');
+  });
+
+  it('records a clear status for malformed feeds', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    install({ fetch: vi.fn(async () => new Response('{"documents":[]}', { status: 200 })) as unknown as typeof fetch });
+    expect(await checkAutoImportFeed()).toBe('error');
+    expect(readAutoImportFeedConfig('alpha').lastStatus).toBe('Feed is not in the expected format');
+  });
+
+  it('stops reading an oversized body without buffering it', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024);
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) { pulled++; controller.enqueue(chunk); },
+      cancel() { cancelled = true; },
+    });
+    await expect(readAutoImportBody(new Response(body), 3 * 1024 * 1024)).rejects.toThrow('too large');
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(6);
+  });
+
+  it('rejects declared oversized bodies and reads small bodies without a stream', async () => {
+    await expect(readAutoImportBody(new Response('x'.repeat(10), { headers: { 'content-length': '999' } }), 100)).rejects.toThrow('too large');
+    const streamless = { headers: new Headers(), body: null, arrayBuffer: async () => PDF_BYTES.slice().buffer } as unknown as Response;
+    expect(Array.from(await readAutoImportBody(streamless, 100))).toEqual(Array.from(PDF_BYTES));
+    const big = { headers: new Headers(), body: null, arrayBuffer: async () => new ArrayBuffer(101) } as unknown as Response;
+    await expect(readAutoImportBody(big, 100)).rejects.toThrow('too large');
+  });
+
+  it('skips a report whose download exceeds the cap without a content length', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    let cancelled = false;
+    const chunk = new Uint8Array(8 * 1024 * 1024);
+    chunk.set(PDF_BYTES);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input) === FEED
+      ? feedResponse([{ id: '7', url: '/inbox/doc/7.pdf' }])
+      : new Response(new ReadableStream<Uint8Array>({
+        pull(controller) { controller.enqueue(chunk); },
+        cancel() { cancelled = true; },
+      }), { status: 200 }));
+    const { handleBatchPDFs, notify } = install({ fetch: fetchMock as unknown as typeof fetch });
+    expect(await checkAutoImportFeed()).toBe('error');
+    expect(cancelled).toBe(true);
+    expect(handleBatchPDFs).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('could not be downloaded'), 'error', 4000);
+  });
+
+  it('keeps the timeout active while the body is read so a stalled feed cannot block later checks', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    saveAutoImportFeedUrl('alpha', FEED);
+    let signal: AbortSignal | undefined;
+    const stalled = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Response(new ReadableStream<Uint8Array>({ start() { /* headers arrived, body never does */ } }), { status: 200 });
+    });
+    const { notify } = install({ fetch: stalled as unknown as typeof fetch });
+    const pending = checkAutoImportFeed({ interactive: true });
+    await vi.advanceTimersByTimeAsync(15001);
+    expect(await pending).toBe('error');
+    expect(signal?.aborted).toBe(true);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('could not check'), 'error', 4000);
+    // The in-flight check was released, so Check now starts a new request.
+    void checkAutoImportFeed({ interactive: true });
+    expect(stalled).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(15001);
+  });
+
+  it('rejects responses redirected outside the address policy', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === FEED) return feedResponse([{ id: '5', url: '/inbox/doc/5.pdf' }]);
+      const response = pdfResponse();
+      Object.defineProperty(response, 'redirected', { value: true });
+      Object.defineProperty(response, 'url', { value: 'http://192.168.1.20/doc/5.pdf' });
+      return response;
+    });
+    const { handleBatchPDFs } = install({ fetch: fetchMock as unknown as typeof fetch });
+    expect(await checkAutoImportFeed()).toBe('error');
+    expect(handleBatchPDFs).not.toHaveBeenCalled();
   });
 });

@@ -10,9 +10,20 @@
 import { profileStorageKey } from './profile-storage-key.js';
 
 export const AUTO_IMPORT_FEED_STORAGE_SUFFIX = 'autoImportFeedV1';
-/** Bounded history so a long-lived feed cannot grow storage without limit. */
-export const AUTO_IMPORT_FEED_MAX_DONE_IDS = 2000;
-export const AUTO_IMPORT_FEED_MAX_ITEMS = 500;
+/**
+ * Largest feed accepted. A larger document is rejected with a clear status
+ * instead of silently hiding its later entries.
+ */
+export const AUTO_IMPORT_FEED_MAX_ENTRIES = 5000;
+/**
+ * Bounded handled-id history. It is at least as large as the feed cap, and ids
+ * still listed by the feed are evicted last, so a handled report that is still
+ * in the feed is never offered again.
+ */
+export const AUTO_IMPORT_FEED_MAX_DONE_IDS = AUTO_IMPORT_FEED_MAX_ENTRIES;
+/** New reports handed to one review batch; the rest are offered on later checks. */
+export const AUTO_IMPORT_FEED_MAX_PER_CHECK = 50;
+const MAX_ID_LENGTH = 200;
 
 export interface AutoImportFeedItem {
   id: string;
@@ -55,6 +66,11 @@ function isAllowedUrl(url: URL, trustedOrigins: readonly string[]): boolean {
   return trustedOrigins.includes(url.origin) || LOOPBACK_HOSTS.has(url.hostname.toLowerCase());
 }
 
+/** URL policy for an address that was fetched or reached through a redirect. */
+export function isAllowedAutoImportUrl(href: string, trustedOrigins: readonly string[]): boolean {
+  try { return isAllowedUrl(new URL(href), trustedOrigins); } catch (_) { return false; }
+}
+
 function originOf(href: string): string | null {
   try { return new URL(href).origin; } catch (_) { return null; }
 }
@@ -75,9 +91,9 @@ export function normalizeAutoImportFeedUrl(input: unknown, baseUrl: string): str
 }
 
 function itemId(value: unknown): string | null {
-  if (typeof value === 'string') return value.trim() || null;
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return null;
+  const id = typeof value === 'string' ? value.trim()
+    : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+  return id && id.length <= MAX_ID_LENGTH ? id : null;
 }
 
 function itemCreated(value: unknown): string | null {
@@ -87,18 +103,23 @@ function itemCreated(value: unknown): string | null {
 
 /**
  * Parse a feed document. Item URLs resolve against the feed URL. Malformed
- * items are dropped; a document without an `items` array is rejected.
+ * items are dropped; a document without an `items` array, or with more than
+ * AUTO_IMPORT_FEED_MAX_ENTRIES entries, is rejected. Every entry is parsed so
+ * handled ids can be filtered before any per-check limit is applied.
  * Items are returned oldest first so imports land in chronological order.
  */
 export function parseAutoImportFeed(doc: unknown, feedUrl: string): AutoImportFeedItem[] {
   if (!isRecord(doc) || !Array.isArray(doc.items)) {
     throw new AutoImportFeedError('Feed is not in the expected format');
   }
+  if (doc.items.length > AUTO_IMPORT_FEED_MAX_ENTRIES) {
+    throw new AutoImportFeedError(`Feed lists more than ${AUTO_IMPORT_FEED_MAX_ENTRIES} reports; publish only recent ones`);
+  }
   const feedOrigin = originOf(feedUrl);
   const trusted = feedOrigin ? [feedOrigin] : [];
   const seen = new Set<string>();
   const items: AutoImportFeedItem[] = [];
-  for (const entry of doc.items.slice(0, AUTO_IMPORT_FEED_MAX_ITEMS)) {
+  for (const entry of doc.items) {
     if (!isRecord(entry)) continue;
     const id = itemId(entry.id);
     if (!id || seen.has(id) || typeof entry.url !== 'string' || !entry.url.trim()) continue;
@@ -191,10 +212,23 @@ export function saveAutoImportFeedUrl(profileId: string, url: string): boolean {
   });
 }
 
-export function markAutoImportItemsDone(profileId: string, ids: readonly string[]): boolean {
+/**
+ * Record handled ids. When the history is full, ids no longer listed by the
+ * feed (`listedIds`, the latest feed's ids) are evicted first, oldest first.
+ */
+export function markAutoImportItemsDone(profileId: string, ids: readonly string[], listedIds?: Iterable<string>): boolean {
   if (!ids.length) return true;
   const current = readAutoImportFeedConfig(profileId);
-  const merged = current.doneIds.filter(id => !ids.includes(id)).concat(ids);
+  const added = new Set(ids);
+  let merged = current.doneIds.filter(id => !added.has(id)).concat([...added]);
+  let excess = merged.length - AUTO_IMPORT_FEED_MAX_DONE_IDS;
+  if (excess > 0 && listedIds) {
+    const listed = new Set(listedIds);
+    merged = merged.filter(id => {
+      if (excess > 0 && !listed.has(id) && !added.has(id)) { excess--; return false; }
+      return true;
+    });
+  }
   return writeAutoImportFeedConfig(profileId, { ...current, doneIds: merged.slice(-AUTO_IMPORT_FEED_MAX_DONE_IDS) });
 }
 

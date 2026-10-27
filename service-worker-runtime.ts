@@ -570,6 +570,11 @@ function installServiceWorkerRuntime({
     // Cache API only supports GET, and the app cache owns same-origin files only.
     if (event.request.method !== 'GET' || !sameOrigin) return;
 
+    // A page that asked for a fresh copy (fetch with cache: 'no-store', for
+    // example an auto-import feed check) gets the network directly: the worker
+    // neither answers from nor writes to its cache.
+    if (event.request.cache === 'no-store') return;
+
     // Bind a new document only when returning the exact current cached app
     // shell. A network navigation can race a deployment and proves no build.
     const ownedNavigationShell = async () => {

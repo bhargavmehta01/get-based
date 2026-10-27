@@ -54,8 +54,13 @@ backups independently of the browser.
   local browser storage. Feed format:
   `{"items":[{"id":"…","title":"…","url":"…","created":"<ISO date>"}]}`, with
   `url` resolved against the feed address and serving `application/pdf`.
-  Feed servers should send `Cache-Control: no-store`; the service worker does
-  not copy such responses into the offline cache.
+  Feeds may list up to 5000 reports; already handled ids are skipped and at
+  most 50 new reports are offered per check, oldest first. Each download is
+  limited to 50 MB (5 MB for the feed) and must finish within its timeout;
+  redirects to addresses outside the policy above are refused. Checks are
+  sent with `cache: 'no-store'`, which the service worker passes straight to
+  the network without reading or writing its cache; it also never caches
+  responses marked `Cache-Control: no-store`.
 - **Hosted analytics:** cookieless pageview and outbound affiliate-click counts
   are on by default, disclosed at first use and switchable in Settings → Privacy.
   They contain no health records, identity or health context.

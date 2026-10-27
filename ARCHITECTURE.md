@@ -526,7 +526,8 @@ the higher-layer behavior through a narrow runtime seam.
   dedupe storage without network access; `auto-import-feed-runtime.js` fetches
   only after the user saved an address and hands downloaded PDFs to
   `handleBatchPDFs`, marking an item done only when the review reports it saved
-  or skipped. It never commits health data itself.
+  or skipped. It claims the shared import lock only after its last await and
+  never commits health data itself.
 - Agent tools expose semantic projections through an explicit catalog. They do
   not grant raw DOM, storage, credential, arbitrary JavaScript, or shell access;
   data mutations require narrow draft/commit tools and explicit approval.

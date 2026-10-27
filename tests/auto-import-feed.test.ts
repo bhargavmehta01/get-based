@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   AUTO_IMPORT_FEED_MAX_DONE_IDS,
+  AUTO_IMPORT_FEED_MAX_ENTRIES,
   AutoImportFeedError,
   autoImportFileName,
   clearAutoImportHistory,
@@ -133,6 +134,40 @@ describe('auto-import dedupe and storage', () => {
     const done = readAutoImportFeedConfig('alpha').doneIds;
     expect(done).toHaveLength(AUTO_IMPORT_FEED_MAX_DONE_IDS);
     expect(done[0]).toBe('id-5');
+  });
+
+  it('parses archives larger than 500 entries so later reports are not hidden', () => {
+    const entries = Array.from({ length: 620 }, (_, i) => ({ id: i + 1, url: `/inbox/doc/${i + 1}.pdf` }));
+    const items = parseAutoImportFeed({ items: entries }, FEED);
+    expect(items).toHaveLength(620);
+    const handled = Array.from({ length: 600 }, (_, i) => String(i + 1));
+    expect(selectNewAutoImportItems(items, handled).map(item => item.id)).toEqual(
+      Array.from({ length: 20 }, (_, i) => String(601 + i)),
+    );
+  });
+
+  it('rejects feeds above the hard cap with a clear error', () => {
+    const entries = Array.from({ length: AUTO_IMPORT_FEED_MAX_ENTRIES + 1 }, (_, i) => ({ id: i, url: `/d/${i}.pdf` }));
+    expect(() => parseAutoImportFeed({ items: entries }, FEED)).toThrow(AutoImportFeedError);
+    expect(() => parseAutoImportFeed({ items: entries }, FEED)).toThrow(/more than/);
+  });
+
+  it('drops overlong ids', () => {
+    const items = parseAutoImportFeed({ items: [{ id: 'x'.repeat(201), url: '/a.pdf' }, { id: 'ok', url: '/b.pdf' }] }, FEED);
+    expect(items.map(item => item.id)).toEqual(['ok']);
+  });
+
+  it('evicts ids no longer in the feed before ids it still lists', () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const listed = Array.from({ length: AUTO_IMPORT_FEED_MAX_DONE_IDS }, (_, i) => `live-${i}`);
+    markAutoImportItemsDone('alpha', ['gone-1', 'gone-2']);
+    markAutoImportItemsDone('alpha', listed.slice(0, -1), listed);
+    markAutoImportItemsDone('alpha', listed.slice(-1), listed);
+    const done = readAutoImportFeedConfig('alpha').doneIds;
+    expect(done).toHaveLength(AUTO_IMPORT_FEED_MAX_DONE_IDS);
+    expect(done).not.toContain('gone-1');
+    expect(done).not.toContain('gone-2');
+    expect(selectNewAutoImportItems(listed.map(id => ({ id, title: id, url: `${FEED}/${id}`, created: null })), done)).toEqual([]);
   });
 
   it('ignores corrupt stored settings', () => {

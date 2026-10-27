@@ -264,6 +264,25 @@ describe('service worker runtime cache behavior', () => {
     await vi.waitFor(() => expect(cache.put).toHaveBeenCalledWith(asset.request, expect.any(Response)));
   });
 
+  it.each(['preview.getbased.health', 'app.getbased.health'])('lets no-store requests bypass worker cache reads and writes on %s', async hostname => {
+    const { listeners, cache, matches } = await loadServiceWorker({ hostname });
+    await Promise.resolve();
+    matches.set('/inbox/feed.json', new Response('{"items":["stale"]}'));
+    const fetchMock = vi.fn(async () => new Response('{"items":[]}', { status: 200 }));
+    (globalThis as unknown as {fetch: unknown}).fetch = fetchMock;
+    const live = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { cache: 'no-store' });
+    listeners.get('fetch')!(live);
+    expect(live.response()).toBeNull();
+    await live.done();
+    expect(cache.match).not.toHaveBeenCalledWith(live.request);
+    expect(cache.put).not.toHaveBeenCalledWith(live.request, expect.anything());
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const ordinary = makeFetchEvent(`https://${hostname}/inbox/feed.json`);
+    listeners.get('fetch')!(ordinary);
+    expect(ordinary.response()).not.toBeNull();
+  });
+
   it('keeps activation alive until clients are claimed', async () => {
     const { listeners, self } = await loadServiceWorker();
     let resolveClaim: (() => void) | undefined;
