@@ -8,6 +8,9 @@ import {
   AutoImportFeedError,
   autoImportFileName,
   clearAutoImportHistory,
+  orderAutoImportPending,
+  recordAutoImportFailures,
+  withAutoImportFreshMarker,
   hasPdfSignature,
   isAutoImportFeedConfigured,
   markAutoImportItemsDone,
@@ -92,7 +95,7 @@ describe('auto-import feed parsing', () => {
 describe('auto-import dedupe and storage', () => {
   it('is off by default and stores settings per profile', () => {
     expect(isAutoImportFeedConfigured('alpha')).toBe(false);
-    expect(readAutoImportFeedConfig('alpha')).toEqual({ url: '', doneIds: [], lastCheckedAt: null, lastStatus: null });
+    expect(readAutoImportFeedConfig('alpha')).toEqual({ url: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null });
     expect(saveAutoImportFeedUrl('alpha', FEED)).toBe(true);
     expect(isAutoImportFeedConfigured('alpha')).toBe(true);
     expect(isAutoImportFeedConfigured('beta')).toBe(false);
@@ -175,5 +178,27 @@ describe('auto-import dedupe and storage', () => {
     expect(readAutoImportFeedConfig('alpha').url).toBe('');
     localStorage.setItem('labcharts-alpha-autoImportFeedV1', JSON.stringify({ url: 5, doneIds: ['ok', 3] }));
     expect(readAutoImportFeedConfig('alpha')).toMatchObject({ url: '', doneIds: ['ok'] });
+  });
+
+  it('retries failed reports after ones that have not failed', () => {
+    const items = parseAutoImportFeed({ items: [
+      { id: '1', url: '/1.pdf' }, { id: '2', url: '/2.pdf' }, { id: '3', url: '/3.pdf' }, { id: '4', url: '/4.pdf' },
+    ] }, FEED);
+    const listed = items.map(item => item.id);
+    saveAutoImportFeedUrl('alpha', FEED);
+    recordAutoImportFailures('alpha', ['2', '1'], listed);
+    recordAutoImportFailures('alpha', ['2'], listed);
+    recordAutoImportFailures('alpha', ['gone'], listed);
+    expect(readAutoImportFeedConfig('alpha').failedIds).toEqual(['1', '2']);
+    expect(orderAutoImportPending(items, readAutoImportFeedConfig('alpha').failedIds).map(item => item.id)).toEqual(['3', '4', '1', '2']);
+    markAutoImportItemsDone('alpha', ['1'], listed);
+    expect(readAutoImportFeedConfig('alpha').failedIds).toEqual(['2']);
+    clearAutoImportHistory('alpha');
+    expect(readAutoImportFeedConfig('alpha').failedIds).toEqual([]);
+  });
+
+  it('marks addresses with a fragment that is never sent to a server', () => {
+    expect(withAutoImportFreshMarker('https://app.example.test/inbox/1.pdf?x=1#page=2')).toBe('https://app.example.test/inbox/1.pdf?x=1#getbased-fresh=auto-import');
+    expect(withAutoImportFreshMarker('not a url')).toBe('not a url');
   });
 });

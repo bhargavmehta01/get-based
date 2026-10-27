@@ -13,17 +13,18 @@ import { importDispatch } from './pdf-import-progress.js';
 import { isDropZoneImportRunning } from './import-drop-zone-runtime.js';
 import {
   AUTO_IMPORT_FEED_MAX_PER_CHECK,
-  AUTO_IMPORT_FRESH_HEADER,
-  AUTO_IMPORT_FRESH_VALUE,
   AutoImportFeedError,
   autoImportFileName,
   hasPdfSignature,
   isAllowedAutoImportUrl,
   markAutoImportItemsDone,
+  orderAutoImportPending,
   parseAutoImportFeed,
   readAutoImportFeedConfig,
   recordAutoImportCheck,
+  recordAutoImportFailures,
   selectNewAutoImportItems,
+  withAutoImportFreshMarker,
   type AutoImportFeedItem,
 } from './auto-import-feed.js';
 
@@ -86,17 +87,18 @@ async function fetchAndRead<T>(
       reject(new AutoImportTimeoutError());
     }, timeoutMs);
   });
-  // Same-origin requests carry the marker the service worker uses to send them
-  // straight to the network. Cross-origin requests never touch the worker cache
-  // and must stay simple requests, so they get no extra header.
-  const headers: Record<string, string> = { Accept: accept };
-  if (appOrigin() !== null && originOf(url) === appOrigin()) headers[AUTO_IMPORT_FRESH_HEADER] = AUTO_IMPORT_FRESH_VALUE;
+  // Same-origin requests carry the URL fragment the service worker uses to send
+  // them straight to the network. A fragment never leaves the browser, so no
+  // extra header or CORS requirement follows a redirect to another host.
+  // Cross-origin requests never touch the worker cache and stay unmarked.
+  const sameOrigin = appOrigin() !== null && originOf(url) === appOrigin();
+  const requestUrl = sameOrigin ? withAutoImportFreshMarker(url) : url;
   const work = (async () => {
-    const response = await deps.fetch(url, {
+    const response = await deps.fetch(requestUrl, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'same-origin',
-      headers,
+      headers: { Accept: accept },
       ...(controller ? { signal: controller.signal } : {}),
     });
     // A redirect must not lead the request outside the address policy.
@@ -226,8 +228,10 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
     return 'error';
   }
   if (state.currentProfile !== profileId) return 'off';
-  // Handled ids are filtered over the whole feed before the per-check limit.
-  const pending = selectNewAutoImportItems(listed, readAutoImportFeedConfig(profileId).doneIds);
+  // Handled ids are filtered over the whole feed before the per-check limit,
+  // and earlier failures go behind reports that have not failed yet.
+  const latest = readAutoImportFeedConfig(profileId);
+  const pending = orderAutoImportPending(selectNewAutoImportItems(listed, latest.doneIds), latest.failedIds);
   const listedIds = listed.map(item => item.id);
   recordAutoImportCheck(profileId, pending.length ? `${pending.length} new report(s) found` : 'No new reports');
   if (!pending.length) {
@@ -238,7 +242,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
 
   const noun = pending.length === 1 ? 'report is' : 'reports are';
   const batchNote = pending.length > fresh.length
-    ? ` The oldest ${fresh.length} will be reviewed now; the rest are offered on the next check.`
+    ? ` ${fresh.length} will be reviewed now; the rest are offered on later checks.`
     : '';
   const proceed = await deps.confirm(
     `${pending.length} new lab ${noun} available from your auto-import source.${batchNote}\n\nReview now? Each report goes through the usual import review, and nothing is saved until you confirm it.`,
@@ -252,7 +256,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
 
   const files: File[] = [];
   const idsByFile = new Map<File, string>();
-  let downloadFailures = 0;
+  const failedIds: string[] = [];
   for (const item of fresh) {
     try {
       const file = await downloadAutoImportPdf(item, config.url);
@@ -260,11 +264,14 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
       idsByFile.set(file, item.id);
     } catch (err) {
       if (isDebugMode()) console.warn('[auto-import] report download failed:', err);
-      downloadFailures++;
+      failedIds.push(item.id);
     }
     if (state.currentProfile !== profileId) return 'off';
   }
-  if (downloadFailures) deps.notify(`Auto-import: ${downloadFailures} report(s) could not be downloaded and will be retried later.`, 'error', 4000);
+  if (failedIds.length) {
+    recordAutoImportFailures(profileId, failedIds, listedIds);
+    deps.notify(`Auto-import: ${failedIds.length} report(s) could not be downloaded and will be retried later.`, 'error', 4000);
+  }
   if (!files.length) return 'error';
 
   let importModule: Awaited<ReturnType<AutoImportFeedRuntimeDependencies['loadImportUI']>>;
@@ -289,8 +296,11 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
     await importModule.handleBatchPDFs(files, {
       onFileResult: (file, outcome) => {
         const id = idsByFile.get(file);
-        // Saved or explicitly skipped in review: never offer again. Failures retry next check.
-        if (id && outcome !== 'failed') markAutoImportItemsDone(profileId, [id], listedIds);
+        // Saved or explicitly skipped in review: never offer again. Failures are
+        // retried on later checks, after reports that have not failed.
+        if (!id) return;
+        if (outcome === 'failed') recordAutoImportFailures(profileId, [id], listedIds);
+        else markAutoImportItemsDone(profileId, [id], listedIds);
       },
     });
   } finally {

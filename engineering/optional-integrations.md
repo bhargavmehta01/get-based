@@ -55,12 +55,17 @@ backups independently of the browser.
   `{"items":[{"id":"…","title":"…","url":"…","created":"<ISO date>"}]}`, with
   `url` resolved against the feed address and serving `application/pdf`.
   Feeds may list up to 5000 reports; already handled ids are skipped and at
-  most 50 new reports are offered per check, oldest first. Each download is
-  limited to 50 MB (5 MB for the feed) and must finish within its timeout;
-  redirects to addresses outside the policy above are refused. Checks are
-  sent with `cache: 'no-store'`, which the service worker passes straight to
-  the network without reading or writing its cache; it also never caches
-  responses marked `Cache-Control: no-store`.
+  most 50 new reports are offered per check, oldest first, with reports that
+  failed to download or import retried after ones that have not failed. Each
+  download is limited to 50 MB (5 MB for the feed) and must finish within its
+  timeout; redirects to addresses outside the policy above are refused.
+  Requests are sent with `cache: 'no-store'`. Same-origin feed and report
+  requests also carry the URL fragment `#getbased-fresh=auto-import`, and only
+  requests with that fragment bypass the service worker, which neither answers
+  them from nor copies them into its cache. The fragment is never sent to a
+  server. Other same-origin requests, including ones marked `no-store`, keep the
+  worker's normal caching, so a same-origin feed should not reuse a path the
+  app itself loads.
 - **Hosted analytics:** cookieless pageview and outbound affiliate-click counts
   are on by default, disclosed at first use and switchable in Settings → Privacy.
   They contain no health records, identity or health context.

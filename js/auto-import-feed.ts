@@ -24,13 +24,14 @@ export const AUTO_IMPORT_FEED_MAX_DONE_IDS = AUTO_IMPORT_FEED_MAX_ENTRIES;
 /** New reports handed to one review batch; the rest are offered on later checks. */
 export const AUTO_IMPORT_FEED_MAX_PER_CHECK = 50;
 /**
- * Request header that marks a same-origin auto-import feed or report fetch.
- * The service worker passes only requests carrying this exact header straight
- * to the network, so live reports are never answered from or written to the
- * offline app cache. Keep in sync with service-worker-runtime.ts.
+ * URL fragment that marks a same-origin auto-import feed or report fetch. The
+ * service worker passes only requests carrying this exact fragment straight to
+ * the network, so live reports are never answered from or written to the
+ * offline app cache. A fragment is never sent to any server and adds no CORS
+ * requirement, so it stays harmless if the address redirects to another host.
+ * Keep in sync with service-worker-runtime.ts.
  */
-export const AUTO_IMPORT_FRESH_HEADER = 'X-GetBased-Fresh';
-export const AUTO_IMPORT_FRESH_VALUE = 'auto-import';
+export const AUTO_IMPORT_FRESH_FRAGMENT = 'getbased-fresh=auto-import';
 const MAX_ID_LENGTH = 200;
 
 export interface AutoImportFeedItem {
@@ -43,11 +44,13 @@ export interface AutoImportFeedItem {
 export interface AutoImportFeedConfig {
   url: string;
   doneIds: string[];
+  /** Ids whose download or import failed, least recently failed first. */
+  failedIds: string[];
   lastCheckedAt: string | null;
   lastStatus: string | null;
 }
 
-const EMPTY_CONFIG: AutoImportFeedConfig = { url: '', doneIds: [], lastCheckedAt: null, lastStatus: null };
+const EMPTY_CONFIG: AutoImportFeedConfig = { url: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null };
 
 export class AutoImportFeedError extends Error {
   constructor(message: string) {
@@ -81,6 +84,17 @@ export function isAllowedAutoImportUrl(href: string, trustedOrigins: readonly st
 
 function originOf(href: string): string | null {
   try { return new URL(href).origin; } catch (_) { return null; }
+}
+
+/** `href` with the service worker's network pass-through fragment. */
+export function withAutoImportFreshMarker(href: string): string {
+  try {
+    const url = new URL(href);
+    url.hash = AUTO_IMPORT_FRESH_FRAGMENT;
+    return url.href;
+  } catch (_) {
+    return href;
+  }
 }
 
 /**
@@ -154,6 +168,20 @@ export function selectNewAutoImportItems(items: readonly AutoImportFeedItem[], d
   return items.filter(item => !done.has(item.id));
 }
 
+/**
+ * Order pending items for one check: reports that never failed come first in
+ * feed order, then earlier failures, least recently failed first. Failures are
+ * still retried, but they cannot keep newer reports out of every batch.
+ */
+export function orderAutoImportPending(items: readonly AutoImportFeedItem[], failedIds: readonly string[]): AutoImportFeedItem[] {
+  const failedRank = new Map(failedIds.map((id, index) => [id, index]));
+  const fresh = items.filter(item => !failedRank.has(item.id));
+  const retries = items
+    .filter(item => failedRank.has(item.id))
+    .sort((a, b) => failedRank.get(a.id)! - failedRank.get(b.id)!);
+  return fresh.concat(retries);
+}
+
 /** A safe download name for the review flow, always ending in `.pdf`. */
 export function autoImportFileName(item: Pick<AutoImportFeedItem, 'id' | 'title'>): string {
   const base = item.title
@@ -180,13 +208,14 @@ function getStorage(): Storage | null {
 
 export function readAutoImportFeedConfig(profileId: string): AutoImportFeedConfig {
   const storage = getStorage();
-  if (!storage) return { ...EMPTY_CONFIG, doneIds: [] };
+  if (!storage) return { ...EMPTY_CONFIG, doneIds: [], failedIds: [] };
   let parsed: unknown = null;
   try { parsed = JSON.parse(storage.getItem(storageKey(profileId)) || 'null'); } catch (_) { parsed = null; }
-  if (!isRecord(parsed)) return { ...EMPTY_CONFIG, doneIds: [] };
+  if (!isRecord(parsed)) return { ...EMPTY_CONFIG, doneIds: [], failedIds: [] };
   return {
     url: typeof parsed.url === 'string' ? parsed.url : '',
     doneIds: Array.isArray(parsed.doneIds) ? parsed.doneIds.filter((id): id is string => typeof id === 'string') : [],
+    failedIds: Array.isArray(parsed.failedIds) ? parsed.failedIds.filter((id): id is string => typeof id === 'string') : [],
     lastCheckedAt: typeof parsed.lastCheckedAt === 'string' ? parsed.lastCheckedAt : null,
     lastStatus: typeof parsed.lastStatus === 'string' ? parsed.lastStatus : null,
   };
@@ -196,7 +225,7 @@ function writeAutoImportFeedConfig(profileId: string, config: AutoImportFeedConf
   const storage = getStorage();
   if (!storage) return false;
   try {
-    if (!config.url && !config.doneIds.length) storage.removeItem(storageKey(profileId));
+    if (!config.url && !config.doneIds.length && !config.failedIds.length) storage.removeItem(storageKey(profileId));
     else storage.setItem(storageKey(profileId), JSON.stringify(config));
     return true;
   } catch (_) {
@@ -237,12 +266,33 @@ export function markAutoImportItemsDone(profileId: string, ids: readonly string[
       return true;
     });
   }
-  return writeAutoImportFeedConfig(profileId, { ...current, doneIds: merged.slice(-AUTO_IMPORT_FEED_MAX_DONE_IDS) });
+  return writeAutoImportFeedConfig(profileId, {
+    ...current,
+    doneIds: merged.slice(-AUTO_IMPORT_FEED_MAX_DONE_IDS),
+    failedIds: current.failedIds.filter(id => !added.has(id)),
+  });
+}
+
+/**
+ * Record ids whose download or import failed so later checks retry them after
+ * reports that have not failed. Only ids the latest feed still lists are kept.
+ */
+export function recordAutoImportFailures(profileId: string, ids: readonly string[], listedIds: Iterable<string>): boolean {
+  if (!ids.length) return true;
+  const current = readAutoImportFeedConfig(profileId);
+  const failed = new Set(ids);
+  const done = new Set(current.doneIds);
+  const listed = new Set(listedIds);
+  const merged = current.failedIds
+    .filter(id => !failed.has(id))
+    .concat([...failed])
+    .filter(id => listed.has(id) && !done.has(id));
+  return writeAutoImportFeedConfig(profileId, { ...current, failedIds: merged.slice(-AUTO_IMPORT_FEED_MAX_ENTRIES) });
 }
 
 export function clearAutoImportHistory(profileId: string): boolean {
   const current = readAutoImportFeedConfig(profileId);
-  return writeAutoImportFeedConfig(profileId, { ...current, doneIds: [] });
+  return writeAutoImportFeedConfig(profileId, { ...current, doneIds: [], failedIds: [] });
 }
 
 export function recordAutoImportCheck(profileId: string, status: string, at: Date = new Date()): boolean {

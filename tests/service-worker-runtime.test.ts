@@ -252,7 +252,7 @@ describe('service worker runtime cache behavior', () => {
     (globalThis as unknown as {fetch: unknown}).fetch = fetchMock;
     cache.match.mockClear();
     cache.put.mockClear();
-    const live = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { cache: 'no-store', headers: { 'X-GetBased-Fresh': 'auto-import' } });
+    const live = makeFetchEvent(`https://${hostname}/inbox/feed.json#getbased-fresh=auto-import`, { cache: 'no-store' });
     listeners.get('fetch')!(live);
     expect(live.response()).toBeNull();
     await live.done();
@@ -260,8 +260,8 @@ describe('service worker runtime cache behavior', () => {
     expect(cache.put).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
 
-    // Only the exact marker value opts out; anything else is an ordinary request.
-    const other = makeFetchEvent(`https://${hostname}/inbox/feed.json`, { headers: { 'X-GetBased-Fresh': 'yes' } });
+    // Only the exact marker fragment opts out; anything else is an ordinary request.
+    const other = makeFetchEvent(`https://${hostname}/inbox/feed.json#getbased-fresh=yes`);
     listeners.get('fetch')!(other);
     expect(other.response()).not.toBeNull();
   });

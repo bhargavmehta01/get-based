@@ -113,11 +113,49 @@ describe('auto-import feed runtime', () => {
     const sameOrigin = new URL('/inbox/feed.json', location.href).href;
     await fetchAutoImportFeed(sameOrigin);
     await fetchAutoImportFeed(FEED);
-    expect(seen.map(entry => entry.url)).toEqual([sameOrigin, FEED]);
-    for (const entry of seen) expect(entry.init?.cache).toBe('no-store');
-    expect(seen[0]?.init?.headers).toEqual({ Accept: 'application/json', 'X-GetBased-Fresh': 'auto-import' });
-    // Cross-origin requests stay simple (no preflight) and never reach the worker cache.
-    expect(seen[1]?.init?.headers).toEqual({ Accept: 'application/json' });
+    // The marker is a URL fragment: never sent to a server, and no extra
+    // header that a redirect target would have to allow through CORS.
+    expect(seen.map(entry => entry.url)).toEqual([`${sameOrigin}#getbased-fresh=auto-import`, FEED]);
+    for (const entry of seen) {
+      expect(entry.init?.cache).toBe('no-store');
+      expect(entry.init?.headers).toEqual({ Accept: 'application/json' });
+    }
+  });
+
+  it('retries failed downloads after newer reports so they cannot block the queue', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const entries = Array.from({ length: 51 }, (_, i) => ({ id: String(i + 1), title: `R${i + 1}`, url: `/inbox/doc/${i + 1}.pdf` }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === FEED) return feedResponse(entries);
+      return url.endsWith('/51.pdf') ? pdfResponse() : new Response('missing', { status: 404 });
+    });
+    const { handleBatchPDFs } = install({ fetch: fetchMock as unknown as typeof fetch });
+    handleBatchPDFs.mockImplementation(async (files, options) => {
+      for (const file of files) options?.onFileResult?.(file, 'imported');
+    });
+    // First check: the oldest 50 all fail and are recorded as failed, not handled.
+    expect(await checkAutoImportFeed()).toBe('error');
+    expect(readAutoImportFeedConfig('alpha').failedIds).toHaveLength(50);
+    expect(readAutoImportFeedConfig('alpha').doneIds).toEqual([]);
+    // Next check: report 51 is reached first, then the failures are retried.
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(handleBatchPDFs.mock.calls[0]![0].map((file: File) => file.name)).toEqual(['R51.pdf']);
+    expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['51']);
+    expect(readAutoImportFeedConfig('alpha').failedIds).toHaveLength(50);
+  });
+
+  it('retries reports that failed in review after ones that have not failed', async () => {
+    saveAutoImportFeedUrl('alpha', FEED);
+    const { handleBatchPDFs } = install();
+    handleBatchPDFs.mockImplementationOnce(async (files, options) => {
+      options?.onFileResult?.(files[0]!, 'failed');
+    });
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(readAutoImportFeedConfig('alpha').failedIds).toEqual(['1']);
+    handleBatchPDFs.mockImplementationOnce(async () => {});
+    expect(await checkAutoImportFeed()).toBe('started');
+    expect(handleBatchPDFs.mock.calls[1]![0].map((file: File) => file.name)).toEqual(['Report two.pdf', 'Report three.pdf', 'Report one.pdf']);
   });
 
   it('reports feed errors with a short notice and leaves history untouched', async () => {
@@ -183,7 +221,7 @@ describe('auto-import feed runtime', () => {
     });
     expect(await checkAutoImportFeed()).toBe('started');
     expect(confirm.mock.calls[0]![0]).toContain('80 new lab reports');
-    expect(confirm.mock.calls[0]![0]).toContain('oldest 50');
+    expect(confirm.mock.calls[0]![0]).toContain('50 will be reviewed now');
     expect(handleBatchPDFs.mock.calls[0]![0].map((file: File) => file.name)[0]).toBe('R561.pdf');
     expect(handleBatchPDFs.mock.calls[0]![0]).toHaveLength(50);
 
