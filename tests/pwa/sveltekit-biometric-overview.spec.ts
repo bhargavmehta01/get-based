@@ -33,8 +33,11 @@ async function keyboardActivate(page:Page,control:Locator){await control.scrollI
  * deliberately suspends title and adds aria-describedby while hovered. Let its
  * real pointerout/RAF lifecycle restore the original ordered attributes. */
 async function neutralBiometricPointer(page: Page, widget: Locator) {
-  if (!await page.evaluate(() => matchMedia('(pointer: fine)').matches)) return;
+  // Mobile WebKit can turn the last tap point into a synthetic mouse hover when
+  // the layout shifts under it (for example when a toast appears), so park the
+  // pointer away from the widget on coarse devices too.
   await page.mouse.move(0, 0);
+  if (!await page.evaluate(() => matchMedia('(pointer: fine)').matches)) return;
   for (const control of await widget.locator('.db-biometric-remove').all()) {
     await expect(control).toHaveAttribute('title', 'Remove metric');
     await expect(control).not.toHaveAttribute('aria-describedby');
