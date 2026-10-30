@@ -1,6 +1,7 @@
 // pii-review.js — PII diff rendering and review-modal interaction.
 
 import type { ModalOverlayOptions } from './modal-lifecycle.js';
+import { syncPIIReviewScroll } from './pii-scroll-sync.js';
 
 export type PIIStreamFunction = (
   onChunk: (chunk: string) => void,
@@ -211,6 +212,8 @@ export function reviewPIIBeforeSend(
     const stopButton = overlay.querySelector<HTMLButtonElement>('#pii-stream-stop');
     const leftPanel = overlay.querySelector<HTMLElement>('.pii-review-viewer > .pii-diff-left');
     const mobileOriginal = overlay.querySelector<HTMLElement>('.pii-mobile-original-body');
+    const rightPanel = overlay.querySelector<HTMLElement>('.pii-review-viewer > .pii-diff-right');
+    if (leftPanel && rightPanel) syncPIIReviewScroll(leftPanel, rightPanel);
     let dirty = false;
 
     searchInput.addEventListener('input', () => {
