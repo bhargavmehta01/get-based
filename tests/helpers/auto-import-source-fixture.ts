@@ -20,7 +20,7 @@ export function syntheticLabPdf(month = '01'): Buffer {
 }
 
 /** No Paperless, AI model, API credentials, or external network required. */
-export async function startAutoImportSourceFixture(options: { port?: number; allowedOrigins: string[] }) {
+export async function startAutoImportSourceFixture(options: { port?: number; allowedOrigins: string[]; beforeExtraction?: () => Promise<void> }) {
   const requests = { feeds: 0, pdfs: 0, ai: 0, extraction: 0 };
   let retryAttempts = 0;
   const server = createServer(async (req, res) => {
@@ -63,7 +63,7 @@ export async function startAutoImportSourceFixture(options: { port?: number; all
       if (!userText.includes('SYNTHETIC')) { json({ error: 'Only synthetic fixture reports are accepted' }, 422); return; }
       requests.ai++;
       const extraction = input.messages?.some(message => String(message.content).includes('You are a lab report data extraction assistant'));
-      if (extraction) requests.extraction++;
+      if (extraction) { requests.extraction++; await options.beforeExtraction?.(); }
       const content = JSON.stringify(extraction ? { testType: 'blood', labName: 'Synthetic Laboratory', date: userText.includes('2026-02-12') ? '2026-02-12' : '2026-01-12', sampleTime: null, fasting: null,
         markers: [{ rawName: 'Glucose', value: 5.2, mappedKey: 'biochemistry.glucose', unit: 'mmol/l', refMin: 3.9, refMax: 5.6 },
           { rawName: 'Ferritin', value: 65, mappedKey: 'iron.ferritin', unit: 'ng/ml', refMin: 20, refMax: 200 }] } : { testType: 'blood', labName: 'Synthetic Laboratory' });

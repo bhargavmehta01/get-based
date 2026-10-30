@@ -472,7 +472,36 @@ export function showNotification(message: unknown, type?: string, duration?: num
   }, duration || 3000);
 }
 
+const confirmationQueue: (() => void)[] = [];
+let confirmationRunning = false;
+let confirmationWaiter: MutationObserver | null = null;
+function drainConfirmations() {
+  if (confirmationRunning || confirmationWaiter || !confirmationQueue.length) return;
+  if (document.getElementById('confirm-dialog-overlay')?.classList.contains('show')) {
+    // Other workflows (for example PDF preflight) share this overlay.
+    confirmationWaiter = new MutationObserver(() => {
+      if (document.getElementById('confirm-dialog-overlay')?.classList.contains('show')) return;
+      confirmationWaiter?.disconnect(); confirmationWaiter = null;
+      drainConfirmations();
+    });
+    confirmationWaiter.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    return;
+  }
+  confirmationQueue.shift()!();
+}
 export function showConfirmDialog(message: string, options: ConfirmDialogOptions = {}): Promise<boolean> {
+  return new Promise<boolean>((resolve, reject) => {
+    confirmationQueue.push(() => {
+      confirmationRunning = true;
+      const next = () => { confirmationRunning = false; drainConfirmations(); };
+      showConfirmDialogNow(message, options).then(value => { resolve(value); next(); }, error => { reject(error); next(); });
+    });
+    // Keep the first dialog synchronous; existing callers can immediately
+    // interact with its buttons. Later callers wait until it has settled.
+    drainConfirmations();
+  });
+}
+function showConfirmDialogNow(message: string, options: ConfirmDialogOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const confirmLabel = options.confirmLabel || 'Confirm';
     const cancelLabel = options.cancelLabel || 'Cancel';
@@ -497,13 +526,14 @@ export function showConfirmDialog(message: string, options: ConfirmDialogOptions
     overlay.dataset.escapeOwner = 'utils-confirm';
     const cleanup = () => {
       document.removeEventListener('keydown', onKey);
-      overlay.onclick = previousOnclick;
-      delete overlay.dataset.escapeOwner;
+      observer.disconnect();
+      if (overlay.onclick === onBackdrop) overlay.onclick = previousOnclick;
+      if (overlay.contains(ok) && overlay.dataset.escapeOwner === 'utils-confirm') delete overlay.dataset.escapeOwner;
     };
-    const close = (result: boolean) => {
+    const close = (result: boolean, hide = true) => {
       if (settled) return;
       settled = true;
-      closeModalOverlay(overlay);
+      if (hide && overlay.contains(ok)) closeModalOverlay(overlay);
       cleanup();
       resolve(result);
     };
@@ -514,7 +544,7 @@ export function showConfirmDialog(message: string, options: ConfirmDialogOptions
       }
     };
     document.addEventListener('keydown', onKey);
-    overlay.onclick = (e) => {
+    const onBackdrop = (e: MouseEvent) => {
       if (e.target === overlay) {
         const d = overlay.querySelector('.confirm-dialog');
         if (d) {
@@ -523,6 +553,13 @@ export function showConfirmDialog(message: string, options: ConfirmDialogOptions
         }
       }
     };
+    overlay.onclick = onBackdrop;
+    const observer = new MutationObserver(() => {
+      // An externally removed, hidden or replaced dialog must release its
+      // caller, without closing or rewriting the replacement workflow's UI.
+      if (!overlay.isConnected || !overlay.contains(ok) || !overlay.classList.contains('show')) close(false, false);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     // Reused confirmation must follow a parent opened after its last use.
     if (overlay !== document.body.lastElementChild) document.body.appendChild(overlay);
     openModalOverlay(overlay, { initialFocus: '#confirm-cancel', focusDelay: 0 });

@@ -178,3 +178,88 @@ test('manual sandbox launcher configures protected credentials and offers a repo
     expect((await snapshot(page)).entries).toEqual([]);
   } finally { await source.close(); }
 });
+
+
+test('a profile switch during AI analysis stops the original source batch without saving or handling it', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const source = await startAutoImportSourceFixture({ allowedOrigins: [new URL(test.info().project.use.baseURL!).origin], beforeExtraction: () => gate });
+  try {
+    await openSandbox(page, source.origin);
+    const other = await page.evaluate(async () => (await import('/js/profile.js')).createProfile('Other synthetic profile'));
+    await configureSource(page, source.origin + '/feed.json?scenario=two');
+    await checkSource(page);
+    await page.getByRole('button', { name: 'Review now', exact: true }).click();
+    await page.getByRole('button', { name: 'Send to AI', exact: true }).click();
+    await expect.poll(() => source.requests.extraction).toBe(1);
+    await page.evaluate(async id => { await (await import('/js/profile.js')).switchProfile(id); }, other);
+    release();
+    await expect.poll(() => page.evaluate(async () => (await import('/js/pdf-import-progress.js')).importDispatch.busy)).toBe(false);
+    await expect(page.locator('#import-confirm-btn')).not.toBeVisible();
+    expect(source.requests.extraction).toBe(1);
+    expect((await snapshot(page)).entries).toEqual([]);
+    await page.evaluate(async () => { await (await import('/js/profile.js')).switchProfile('default'); });
+    expect((await snapshot(page)).entries).toEqual([]);
+    expect((await snapshot(page)).done).toEqual([]);
+    expect((await snapshot(page)).failed).toEqual([]);
+  } finally { release(); await source.close(); }
+});
+
+
+test('a profile switch closes an open batch review and leaves the remaining files pending', async ({ page }) => {
+  const source = await startAutoImportSourceFixture({ allowedOrigins: [new URL(test.info().project.use.baseURL!).origin] });
+  try {
+    await openSandbox(page, source.origin);
+    const other = await page.evaluate(async () => (await import('/js/profile.js')).createProfile('Other synthetic profile'));
+    await configureSource(page, source.origin + '/feed.json?scenario=two');
+    await checkSource(page);
+    await reviewReport(page);
+    await page.evaluate(async id => { await (await import('/js/profile.js')).switchProfile(id); }, other);
+    await expect.poll(() => page.evaluate(async () => (await import('/js/pdf-import-progress.js')).importDispatch.busy)).toBe(false);
+    await expect(page.locator('#import-confirm-btn')).not.toBeVisible();
+    expect(source.requests.extraction).toBe(1);
+    expect((await snapshot(page)).entries).toEqual([]);
+    await page.evaluate(async () => { await (await import('/js/profile.js')).switchProfile('default'); });
+    expect((await snapshot(page)).done).toEqual([]);
+    expect((await snapshot(page)).failed).toEqual([]);
+    expect((await snapshot(page)).entries).toEqual([]);
+  } finally { await source.close(); }
+});
+
+for (const first of ['history', 'feed'] as const) {
+  test(`overlapping ${first}-first confirmations settle and later feed checks remain usable`, async ({ page }) => {
+    const source = await startAutoImportSourceFixture({ allowedOrigins: [new URL(test.info().project.use.baseURL!).origin] });
+    try {
+      await openSandbox(page, source.origin);
+      await configureSource(page, source.origin + '/feed.json');
+      await page.evaluate(async () => {
+        const feed = await import('/js/auto-import-feed.js');
+        feed.markAutoImportItemsDone('default', ['previous-report']);
+      });
+      await page.evaluate(async order => {
+        const runtime = await import('/js/auto-import-feed-runtime.js');
+        const settings = await import('/js/settings-data.js');
+        void runtime.checkAutoImportFeed();
+        if (order === 'history') void settings.clearAutoImportHistoryFromSettings();
+      }, first);
+      if (first === 'history') {
+        await expect.poll(() => page.evaluate(async () => (await import('/js/auto-import-feed.js')).readAutoImportFeedConfig('default').lastStatus)).toBe('1 new report(s) found');
+        await expect(page.getByRole('button', { name: 'Reset report history', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Reset report history', exact: true }).click();
+        await page.getByRole('button', { name: 'Later', exact: true }).click();
+      } else {
+        await expect(page.getByRole('button', { name: 'Review now', exact: true })).toBeVisible();
+        await page.evaluate(async () => { void (await import('/js/settings-data.js')).clearAutoImportHistoryFromSettings(); });
+        await expect(page.getByRole('button', { name: 'Review now', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Later', exact: true }).click();
+        await page.getByRole('button', { name: 'Reset report history', exact: true }).click();
+      }
+      await checkSource(page);
+      await page.getByRole('button', { name: 'Later', exact: true }).click();
+      expect(source.requests.feeds).toBe(2);
+      expect(source.requests.pdfs).toBe(0);
+      expect((await snapshot(page)).entries).toEqual([]);
+      expect((await snapshot(page)).done).toEqual([]);
+    } finally { await source.close(); }
+  });
+}

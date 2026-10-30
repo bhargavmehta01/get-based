@@ -321,6 +321,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
   importDispatch.busy = true;
   try {
     await importModule.handleBatchPDFs(files, {
+      profileId, isCurrent: sourceIsCurrent,
       onFileResult: (file, outcome) => {
         const id = idsByFile.get(file);
         // Saved or explicitly skipped in review: never offer again. Failures are

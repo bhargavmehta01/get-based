@@ -49,7 +49,9 @@ backups independently of the browser.
   cross-origin requests. Addresses must be HTTPS, except plain HTTP on the
   app's own origin or loopback. New reports enter the normal AI-assisted import
   and review, so they reach the configured AI provider like a manually dropped
-  PDF and nothing is saved until the user confirms the review. The feed address
+  PDF and nothing is saved until the user confirms the review. A profile switch
+  stops the batch without saving or handling its unfinished reports. Discovery
+  confirmations wait behind any existing confirmation. The feed address
   and the ids of reports already imported or skipped are stored per profile in
   local browser storage. **Disconnect** removes the saved address while keeping
   imported lab data and report history for reconnecting the same address. Saving
