@@ -8,6 +8,7 @@ import { migrateBiometricsToManual, hasManualData } from './wearables-manual.js'
 import { syncWearableSummary } from './wearables-summary.js';
 import { loadWearablesConnectModule } from './wearables-connect-loader.js';
 import { preloadMitoCompoundData } from './supplement-warnings.js';
+import { profileStorageKey } from './profile-storage-key.js';
 import {
   getStartupSunEngineVersionRuntime,
   hasSunSessionRehydrateRuntime,
@@ -21,6 +22,22 @@ export function runPostProfileStartupMaintenance() {
   scheduleSunSessionRehydrate();
   hydrateUserLightDevicesFromPresets();
   migrateLegacyBiometrics();
+  scheduleAutoImportFeedCheck();
+}
+
+function scheduleAutoImportFeedCheck() {
+  // Optional, user-configured source of new PDF reports. No module load or
+  // network request happens unless the active profile has a feed address.
+  // The storage name mirrors AUTO_IMPORT_FEED_STORAGE_SUFFIX in auto-import-feed.js;
+  // reading it here keeps the feature's modules out of the cold-load graph.
+  let stored = '';
+  try { stored = localStorage.getItem(profileStorageKey(state.currentProfile, 'autoImportFeedV1')) || ''; } catch (_) { return; }
+  if (!stored.includes('"url":"http')) return;
+  setTimeout(() => {
+    import('./auto-import-feed-runtime.js')
+      .then(({ startAutoImportFeed }) => startAutoImportFeed())
+      .catch(() => {});
+  }, 2500);
 }
 
 function preloadTrackedSupplementWarnings() {

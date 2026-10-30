@@ -70,6 +70,10 @@ import {
   renderDataEntriesSection,
   prepareDataEntriesSection,
   resetCurrentProfileUsage,
+  saveAutoImportFeedFromSettings,
+  disconnectAutoImportFeedFromSettings,
+  checkAutoImportFeedFromSettings,
+  clearAutoImportHistoryFromSettings,
 } from './settings-data.js';
 import {
   openImportBenchmarksModal,
@@ -335,6 +339,19 @@ async function handleSettingsClick(event: Event) {
   } else if (action === 'clear-all-data') {
     event.preventDefault();
     (settingsRuntime as SettingsOperations).clearAllData();
+  } else if (action === 'save-auto-import-feed') {
+    event.preventDefault();
+    saveAutoImportFeedFromSettings();
+  } else if (action === 'disconnect-auto-import-feed') {
+    event.preventDefault();
+    disconnectAutoImportFeedFromSettings();
+  } else if (action === 'check-auto-import-feed') {
+    event.preventDefault();
+    closeSettingsModal();
+    void checkAutoImportFeedFromSettings();
+  } else if (action === 'clear-auto-import-history') {
+    event.preventDefault();
+    void clearAutoImportHistoryFromSettings();
   } else if (action === 'reset-profile-usage') {
     event.preventDefault();
     resetCurrentProfileUsage();

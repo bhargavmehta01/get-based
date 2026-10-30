@@ -54,6 +54,12 @@
         <div data-backup-settings-root data-settings-protection-view="backup"></div>
       </div>
 
+      <div class="settings-group-title">Lab report source</div>
+
+      <div class="settings-section" id="auto-import-feed-section">
+        <div id="auto-import-feed-content"></div>
+      </div>
+
       <div class="settings-group-title">Imported Data</div>
 
       <div class="settings-section" id="data-entries-section">

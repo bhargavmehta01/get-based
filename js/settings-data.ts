@@ -9,7 +9,8 @@ import { addUtilsRuntimeListener } from './utils-runtime.js';
 import { showNotification, showConfirmDialog, isDebugMode, setPIIReviewEnabled, bindSyncAppliedRefresh } from './utils.js';
 import { resetProfileUsage } from './schema.js';
 import { loadPdfImport } from './import-loader.js';
-import { refreshDataEntriesView, refreshAIUsageView } from './settings-records-component.js';
+import { refreshDataEntriesView, refreshAIUsageView, refreshAutoImportFeedView } from './settings-records-component.js';
+import { clearAutoImportHistory, normalizeAutoImportFeedUrl, readAutoImportFeedConfig, saveAutoImportFeedUrl } from './auto-import-feed.js';
 import {
   getDeletedImportBenchmarkIds,
   getImportBenchmarks,
@@ -27,6 +28,47 @@ export function renderDataEntriesSection(): string {
   return '<div id="data-entries-content"></div>';
 }
 export function refreshDataEntriesSection(): void { refreshDataEntriesView(); }
+
+export function saveAutoImportFeedFromSettings(): void {
+  const field = document.getElementById('auto-import-feed-url') as HTMLInputElement | null;
+  if (!field || field.closest<HTMLElement>('[data-auto-import-profile]')?.dataset.autoImportProfile !== state.currentProfile) return;
+  const url = normalizeAutoImportFeedUrl(field.value, globalThis.location?.href || 'http://localhost/');
+  if (url === null) { showNotification('Enter a valid report feed address.', 'error'); return; }
+  if (!saveAutoImportFeedUrl(state.currentProfile, url)) { showNotification('Could not save the report source.', 'error'); return; }
+  refreshAutoImportFeedView();
+  showNotification(url ? 'Report source saved. Check for reports now, or next time getbased opens.' : 'Report source disconnected.', 'success');
+}
+
+export function disconnectAutoImportFeedFromSettings(): void {
+  if (!saveAutoImportFeedUrl(state.currentProfile, '')) {
+    showNotification('Could not disconnect the report source.', 'error'); return;
+  }
+  refreshAutoImportFeedView();
+  showNotification('Report source disconnected. Your imported reports are kept.', 'info');
+}
+
+export async function checkAutoImportFeedFromSettings(): Promise<void> {
+  try {
+    const { checkAutoImportFeed } = await import('./auto-import-feed-runtime.js');
+    await checkAutoImportFeed({ interactive: true });
+  } catch (err) {
+    if (isDebugMode()) console.error('Auto-import check failed:', err);
+    showNotification('Could not check the report source.', 'error');
+  }
+  refreshAutoImportFeedView();
+  refreshDataEntriesView();
+}
+
+export async function clearAutoImportHistoryFromSettings(): Promise<void> {
+  const profileId = state.currentProfile;
+  const source = readAutoImportFeedConfig(profileId);
+  const confirmed = await showConfirmDialog('Show previously imported or skipped reports again? Your saved lab data stays unchanged.', { confirmLabel: 'Reset report history', tone: 'primary' });
+  const current = readAutoImportFeedConfig(profileId);
+  if (!confirmed || state.currentProfile !== profileId || current.url !== source.url
+    || current.sourceRevision !== source.sourceRevision) return;
+  clearAutoImportHistory(profileId);
+  refreshAutoImportFeedView();
+}
 
 export async function removeImportedEntryFromSettings(date: unknown) {
   try {
@@ -105,7 +147,7 @@ export async function confirmDisablePIIReview(checkbox:{checked:unknown}) {
 
 // Mounted records follow the current profile after reload/sync without replacing DOM.
 function refreshSettingsRecordsFromData(): void {
-  refreshDataEntriesView(); refreshAIUsageView();
+  refreshDataEntriesView(); refreshAIUsageView(); refreshAutoImportFeedView();
 }
 addUtilsRuntimeListener('labcharts-profile-switched', refreshSettingsRecordsFromData);
 bindSyncAppliedRefresh(refreshSettingsRecordsFromData);

@@ -49,7 +49,7 @@ import {
   buildMarkerReference, getExistingImportMarkerKeys,
 } from './pdf-import-marker-mapping.js';
 import {
-  showImportPreviewAsync,
+  showImportPreviewAsync, getPendingImport, resolveImportPreviewBatch,
 } from './pdf-import-review.js';
 import {
   setPdfImportBatchMode,
@@ -492,13 +492,18 @@ export async function handlePDFFile(file: File, forceImageMode = false, preExtra
 // ═══════════════════════════════════════════════
 // BATCH PDF IMPORT
 // ═══════════════════════════════════════════════
-async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof checkOllamaPII>>, fileNum: number, totalFiles: number) {
+class BatchImportCancelled extends Error {}
+interface BatchImportScope { profileId: string; assertCurrent: () => void }
+async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof checkOllamaPII>>, fileNum: number, totalFiles: number, scope: BatchImportScope) {
+  scope.assertCurrent();
   const benchmarkStarted = performance.now();
   const benchmarkId = startImportBenchmark({ fileName: file.name, fileSize: file.size, importMode: 'text' });
   const finishBatchBenchmark = (status: string, patch: BenchmarkPatch = {}) => finishImportBenchmark(benchmarkId, status, { totalMs: Math.round(performance.now() - benchmarkStarted), ...patch });
   try {
   await showBatchImportProgress(0, file.name, fileNum, totalFiles);
+  scope.assertCurrent();
   const pdfText = await extractPDFText(file);
+  scope.assertCurrent();
   updateImportBenchmark(benchmarkId, {
     stage: 'preflight',
     inputChars: pdfText.length,
@@ -508,11 +513,14 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
 
   // Pre-flight checks — before spending tokens
   await showBatchImportProgress(1, file.name, fileNum, totalFiles);
+  scope.assertCurrent();
   const preflight = await runPreflightChecks(pdfText, file.name);
+  scope.assertCurrent();
   if (!preflight) { finishBatchBenchmark('cancelled', { stage: 'preflight' }); return 'skipped'; }
 
   // PII obfuscation
   await showBatchImportProgress(2, file.name, fileNum, totalFiles);
+  scope.assertCurrent();
   let textForAI = pdfText;
   let privacyMethod: string | null = null;
   let privacyReplacements = 0;
@@ -528,6 +536,7 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
     });
     piiMs = Math.round(performance.now() - piiStart);
     piiTime = Math.round(piiMs / 1000);
+    scope.assertCurrent();
     if (reviewResult === 'cancel') { finishBatchBenchmark('cancelled', { stage: 'privacy' }); return 'skipped'; }
     textForAI = reviewResult;
     privacyMethod = 'ollama+review';
@@ -566,6 +575,7 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
     }
     if (isPIIReviewEnabled()) {
       const reviewResult = await reviewPIIBeforeSend(pdfText, { obfuscatedText: textForAI });
+      scope.assertCurrent();
       if (reviewResult === 'cancel') { finishBatchBenchmark('cancelled', { stage: 'privacy' }); return 'skipped'; }
       textForAI = reviewResult;
     }
@@ -581,8 +591,10 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
   });
 
   await showBatchImportProgress(3, file.name, fileNum, totalFiles);
+  scope.assertCurrent();
   const analysisStart = performance.now();
   const result = await parseLabPDFWithAI(textForAI, file.name, updateImportProgressPct);
+  scope.assertCurrent();
   const analysisMs = Math.round(performance.now() - analysisStart);
   const analysisTime = Math.round(analysisMs / 1000);
   logPrivacyDiagnostic('batch-analysis-complete', {
@@ -610,31 +622,65 @@ async function _processBatchFile(file: File, ollama: Awaited<ReturnType<typeof c
   if (result.markers.length === 0) { finishBatchBenchmark('no-markers', benchmarkResultPatch(result, performance.now() - benchmarkStarted)); showNotification(`${file.name}: No markers found`, 'error'); return 'no-markers'; }
   finishBatchBenchmark('preview', benchmarkResultPatch(result, performance.now() - benchmarkStarted));
   await showBatchImportProgress(4, file.name, fileNum, totalFiles);
+  scope.assertCurrent();
+  result._importProfileId = scope.profileId;
   const action = await (showImportPreviewAsync as PreviewReader)(result, fileNum, totalFiles);
+  scope.assertCurrent();
   return action === 'skip' ? 'skipped' : 'imported';
   } catch (error) {
-    finishBatchBenchmark('failed', { stage: 'analysis', error: getErrorMessage(error) });
+    finishBatchBenchmark(error instanceof BatchImportCancelled ? 'cancelled' : 'failed', { stage: 'analysis', error: getErrorMessage(error) });
     throw error;
   }
 }
 
-export async function handleBatchPDFs(pdfFiles: File[]) {
+/** Final per-file outcome of a batch import. `imported` means the reviewed result was saved. */
+export type BatchPDFOutcome = 'imported' | 'skipped' | 'failed';
+export interface BatchPDFOptions {
+  /** Immutable owner and optional source validity for an asynchronous batch. */
+  profileId?: string;
+  isCurrent?: () => boolean;
+  /** Called once per file after its final attempt (including the retry pass). */
+  onFileResult?: (file: File, outcome: BatchPDFOutcome) => void;
+}
+
+export async function handleBatchPDFs(pdfFiles: File[], options: BatchPDFOptions = {}) {
   if (!hasAssistantFeatureProvider()) {
     showAINeededDialog('import');
     return;
   }
+  // Report each file as soon as its outcome is final, so an interrupted batch
+  // still records the files that were already saved or dismissed.
+  const report = (file: File, outcome: BatchPDFOutcome) => {
+    try { options.onFileResult?.(file, outcome); } catch (_) { /* observers never affect the import */ }
+  };
+  const profileId = options.profileId || state.currentProfile;
+  let cancelled = false;
+  const scope: BatchImportScope = { profileId, assertCurrent: () => {
+    if (cancelled || state.currentProfile !== profileId || options.isCurrent?.() === false) throw new BatchImportCancelled();
+  } };
+  const retire = () => {
+    if (state.currentProfile === profileId) return;
+    cancelled = true;
+    if (getPendingImport()?._importProfileId === profileId) resolveImportPreviewBatch('cancelled');
+  };
+  globalThis.addEventListener?.('labcharts-profile-switched', retire);
   setPdfImportBatchMode(true);
+  try {
+  scope.assertCurrent();
   const ollama = await checkOllamaPII();
   let imported = 0, skipped = 0, failed = 0;
   const failedFiles: { file: File; error: string }[] = [];
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i]!;
+    scope.assertCurrent();
     try {
-      const result = await _processBatchFile(file, ollama, i + 1, pdfFiles.length);
+      const result = await _processBatchFile(file, ollama, i + 1, pdfFiles.length, scope);
       if (result === 'imported') imported++;
       else if (result === 'skipped') skipped++;
       else if (result === 'empty' || result === 'pii-fail' || result === 'no-markers') failed++;
+      report(file, result === 'imported' || result === 'skipped' ? result : 'failed');
     } catch (err) {
+      if (err instanceof BatchImportCancelled) throw err;
       logPrivacyDiagnostic('batch-import-failed', {
         fileIndex: i + 1,
         totalFiles: pdfFiles.length,
@@ -646,17 +692,21 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
   }
   // Retry failed files once (rate limit / API error recovery)
   let retryImported = 0, retryFailed = 0;
+  scope.assertCurrent();
   if (failedFiles.length > 0) {
     showNotification(`Retrying ${failedFiles.length} failed file(s)...`, 'info');
     await new Promise(r => setTimeout(r, 5000));
     for (let i = 0; i < failedFiles.length; i++) {
       const { file } = failedFiles[i]!;
+      scope.assertCurrent();
       try {
-        const result = await _processBatchFile(file, ollama, i + 1, failedFiles.length);
+        const result = await _processBatchFile(file, ollama, i + 1, failedFiles.length, scope);
         if (result === 'imported') { retryImported++; imported++; }
         else if (result === 'skipped') skipped++;
         else failed++;
+        report(file, result === 'imported' || result === 'skipped' ? result : 'failed');
       } catch (err) {
+        if (err instanceof BatchImportCancelled) throw err;
         logPrivacyDiagnostic('batch-retry-failed', {
           fileIndex: i + 1,
           totalFiles: failedFiles.length,
@@ -664,11 +714,11 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
         });
         retryFailed++;
         failed++;
+        report(file, 'failed');
       }
       if (i < failedFiles.length - 1) await new Promise(r => setTimeout(r, 3000));
     }
   }
-  setPdfImportBatchMode(false);
   // Refresh UI once after all files processed
   refreshImportedDataViews();
   hideImportProgress();
@@ -679,6 +729,14 @@ export async function handleBatchPDFs(pdfFiles: File[]) {
   if (retryImported > 0) parts.push(`${retryImported} recovered on retry`);
   showNotification(`Batch import complete: ${parts.join(', ')}`, imported > 0 ? 'success' : 'info');
   if (imported > 0) pdfImportDeps.maybeShowEncryptionNudge();
+  } catch (error) {
+    if (!(error instanceof BatchImportCancelled)) throw error;
+    showNotification('Profile or report source changed. Batch import stopped; remaining reports can be checked again.', 'info');
+    hideImportProgress('cancel');
+  } finally {
+    globalThis.removeEventListener?.('labcharts-profile-switched', retire);
+    setPdfImportBatchMode(false);
+  }
 }
 
 // ═══════════════════════════════════════════════

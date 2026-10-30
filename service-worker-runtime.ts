@@ -567,6 +567,13 @@ function installServiceWorkerRuntime({
     // Cache API only supports GET, and the app cache owns same-origin files only.
     if (event.request.method !== 'GET' || !sameOrigin) return;
 
+    // Same-origin auto-import feed and report checks mark themselves with this
+    // exact URL fragment (js/auto-import-feed.ts) and go straight to the
+    // network: live reports are never answered from or copied into the app
+    // cache. Every other request, including ordinary no-store ones, keeps the
+    // caching behaviour below.
+    if (url.hash === '#getbased-fresh=auto-import') return;
+
     // Bind a new document only when returning the exact current cached app
     // shell. A network navigation can race a deployment and proves no build.
     const ownedNavigationShell = async () => {

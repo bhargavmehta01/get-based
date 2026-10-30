@@ -28,3 +28,15 @@ const SECONDARY = `${BUTTON} gb:records:bg-surface gb:records:text-secondary gb:
 export const RECORD_SECONDARY = `${SECONDARY} gb:records:text-[14px]`;
 export const RECORD_USAGE_BUTTON = `${SECONDARY} gb:records:mt-2 gb:records:text-[11px]`;
 export const RECORD_DANGER = `${BUTTON} gb:records:text-[14px] gb:records:bg-surface gb:records:text-danger gb:records:border-danger gb:records:hover:bg-hover`;
+
+// Report-source controls use the same scoped tokens as the neighboring records.
+export const FEED_DESCRIPTION = 'gb:records:text-[12px] gb:records:text-secondary gb:records:leading-[1.5]';
+export const FEED_INPUT = [
+  'gb:records:block gb:records:w-full gb:records:min-w-0 gb:records:box-border',
+  'gb:records:px-3 gb:records:py-2.5 gb:records:text-[13px] gb:records:leading-[1.5]',
+  'gb:records:rounded-control gb:records:border gb:records:border-line gb:records:bg-surface gb:records:text-ink gb:records:[font-family:inherit]',
+  'gb:records:placeholder:text-muted gb:records:[@media(pointer:coarse)]:min-h-11',
+  'gb:records:focus-visible:outline-2 gb:records:focus-visible:outline-offset-2 gb:records:focus-visible:outline-accent',
+].join(' ');
+export const FEED_BUTTON = 'gb:records:min-h-9 gb:records:[@media(pointer:coarse)]:min-h-11 gb:records:disabled:opacity-50 gb:records:disabled:cursor-not-allowed';
+export const FEED_SUMMARY = 'gb:records:w-fit gb:records:max-w-full gb:records:cursor-pointer gb:records:text-[12px] gb:records:text-secondary gb:records:leading-[1.5] gb:records:rounded-[4px] gb:records:hover:text-ink gb:records:focus-visible:outline-2 gb:records:focus-visible:outline-offset-2 gb:records:focus-visible:outline-accent gb:records:[@media(pointer:coarse)]:min-h-11 gb:records:[@media(pointer:coarse)]:content-center';

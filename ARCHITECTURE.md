@@ -521,6 +521,13 @@ the higher-layer behavior through a narrow runtime seam.
   can apply.
 - Network calls use the existing provider, URL-safety, PII, same-origin, and
   proxy-policy boundaries. New direct fetch paths require an explicit review.
+- The optional auto-import source is a reviewed direct fetch path.
+  `auto-import-feed.js` owns feed parsing, URL policy and per-profile
+  dedupe storage without network access; `auto-import-feed-runtime.js` fetches
+  only after the user saved an address and hands downloaded PDFs to
+  `handleBatchPDFs`, marking an item done only when the review reports it saved
+  or skipped. It claims the shared import lock only after its last await and
+  never commits health data itself.
 - Agent tools expose semantic projections through an explicit catalog. They do
   not grant raw DOM, storage, credential, arbitrary JavaScript, or shell access;
   data mutations require narrow draft/commit tools and explicit approval.

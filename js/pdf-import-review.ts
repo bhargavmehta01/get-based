@@ -382,6 +382,10 @@ function prepareImportReviewRow(m: ImportReviewMarker, origIdx: number, status: 
 }
 
 export function showImportPreview(parseResult: PendingImport) {
+  if (parseResult._importProfileId && parseResult._importProfileId !== state.currentProfile) {
+    showNotification('Profile changed during import — import cancelled for safety.', 'error');
+    resolveImportPreviewBatch('cancelled'); return;
+  }
   failedReview = null;
   const { date, markers, fileName } = parseResult;
   const modal = document.getElementById('import-modal');

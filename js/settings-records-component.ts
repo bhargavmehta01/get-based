@@ -1,17 +1,21 @@
 // Records and usage share lifecycle ownership, while their snapshots stay component-free.
 import DataEntriesSettings, { mount, unmount, flushSync } from './components/DataEntriesSettings.svelte.native.js';
 import AIUsageSettings, { mount as mountUsage, unmount as unmountUsage, flushSync as flushUsage } from './components/AIUsageSettings.svelte.native.js';
-import { getDataEntriesSnapshot, getAIUsageSnapshot } from './settings-records-view.js';
-import type { DataEntriesSnapshot, AIUsageSnapshot, SettingsRecordsView } from './settings-records-contract.js';
+import AutoImportFeedSettings, { mount as mountFeed, unmount as unmountFeed, flushSync as flushFeed } from './components/AutoImportFeedSettings.svelte.native.js';
+import { getDataEntriesSnapshot, getAIUsageSnapshot, getAutoImportFeedSnapshot } from './settings-records-view.js';
+import type { DataEntriesSnapshot, AIUsageSnapshot, AutoImportFeedSnapshot, SettingsRecordsView } from './settings-records-contract.js';
 
 let entries: SettingsRecordsView<DataEntriesSnapshot> | null = null;
 let usage: SettingsRecordsView<AIUsageSnapshot> | null = null;
 let entriesHost: HTMLElement | null = null;
 let usageHost: HTMLElement | null = null;
+let feed: SettingsRecordsView<AutoImportFeedSnapshot> | null = null;
+let feedHost: HTMLElement | null = null;
 export function disposeSettingsRecords(): void {
   if (entries) void unmount(entries);
   if (usage) void unmountUsage(usage);
-  flushSync(); flushUsage(); entries = null; usage = null; entriesHost = null; usageHost = null;
+  if (feed) void unmountFeed(feed);
+  flushSync(); flushUsage(); flushFeed(); entries = null; usage = null; feed = null; entriesHost = null; usageHost = null; feedHost = null;
 }
 export function refreshDataEntriesView(): void {
   const host = document.getElementById('data-entries-content');
@@ -29,4 +33,12 @@ export function refreshAIUsageView(): void {
   if (usage) { void unmountUsage(usage); flushUsage(); }
   usageHost = host; usage = mountUsage(AIUsageSettings, { target: host, props: { initial: snapshot } }); flushUsage();
 }
-export function mountSettingsRecords(): void { refreshDataEntriesView(); refreshAIUsageView(); }
+export function refreshAutoImportFeedView(): void {
+  const host = document.getElementById('auto-import-feed-content');
+  if (!host) return;
+  const snapshot = getAutoImportFeedSnapshot();
+  if (feed && feedHost === host) { flushFeed(() => feed?.refresh(snapshot)); return; }
+  if (feed) { void unmountFeed(feed); flushFeed(); }
+  feedHost = host; feed = mountFeed(AutoImportFeedSettings, { target: host, props: { initial: snapshot } }); flushFeed();
+}
+export function mountSettingsRecords(): void { refreshDataEntriesView(); refreshAIUsageView(); refreshAutoImportFeedView(); }
