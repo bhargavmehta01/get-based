@@ -55,6 +55,19 @@ describe('deterministic report redaction', () => {
     expect(out).toBe(`Report for ${PATIENT_PLACEHOLDER}\nGlucose 91 mg/dL`);
     const single = redactReportText('Test Glucose 91 mg/dL', {key: 'k', profileName: 'Test'}).text;
     expect(single).toBe('Test Glucose 91 mg/dL');
+    const label = redactReportText('=== Page 1 ===\nSynthetic EMF report Bedroom 28 V/m and 45 nT.\n', {key: 'k', profileName: 'Synthetic EMF profile'}).text;
+    expect(label).toBe('=== Page 1 ===\nSynthetic EMF report Bedroom 28 V/m and 45 nT.\n');
+  });
+
+  it('resolves the key only when something is replaced', () => {
+    let calls = 0;
+    const key = () => { calls++; return 'lazy-key'; };
+    expect(redactReportText('Glucose 91 mg/dL\n', {key}).text).toBe('Glucose 91 mg/dL\n');
+    expect(calls).toBe(0);
+    const out = redactReportText('Phone: (404) 555-0134\nTel: (404) 555-0199', {key});
+    expect(out.replacements).toBe(2);
+    expect(calls).toBe(1);
+    expect(out.text).toBe(redactReportText('Phone: (404) 555-0134\nTel: (404) 555-0199', {key: 'lazy-key'}).text);
   });
 
   it('b) keeps the real birth year and age, replaces month/day identically everywhere', () => {

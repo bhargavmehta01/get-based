@@ -476,7 +476,7 @@ function currentProfileName() {
 export function obfuscatePDFText(pdfText: string) {
   const original = pdfText;
   const { text, replacements } = redactReportText(pdfText, {
-    key: getPIIPseudonymKey(),
+    key: () => getPIIPseudonymKey(),
     profileName: currentProfileName(),
     profileDob: state.profileDob,
   });

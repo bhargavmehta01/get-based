@@ -9,8 +9,8 @@ import { createPseudonymDigest } from './pii-pseudonym.js';
 import type { PseudonymFn } from './pii-pseudonym.js';
 
 export interface RedactionContext {
-  /** Per-profile secret. Same key → same replacements. */
-  readonly key: string;
+  /** Per-profile secret, or a getter called only once a replacement is needed. Same key → same replacements. */
+  readonly key: string | (() => string);
   /** Profile display name; used as a patient-name hint only when it looks like a full name. */
   readonly profileName?: string | null | undefined;
   /** Profile date of birth (YYYY-MM-DD); every occurrence in the report is treated as the DOB. */
@@ -43,6 +43,11 @@ const NON_NAME_WORDS = new Set([
 const STANDALONE_DENY = new Set([
   'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
   'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec', 'will', 'mark', 'iron', 'bill',
+]);
+// Profile names that are labels ("Synthetic EMF profile", "My labs") rather than a person.
+const PROFILE_LABEL_WORDS = new Set([
+  'profile', 'profiles', 'synthetic', 'demo', 'sample', 'example', 'default', 'main', 'primary', 'personal', 'family',
+  'my', 'me', 'mine', 'our', 'self', 'kid', 'kids', 'child', 'baby', 'mom', 'dad', 'wife', 'husband', 'partner', 'unrelated', 'keep',
 ]);
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -158,7 +163,13 @@ function personForms(person: Person, allowStandaloneFirst: boolean): string[] {
 }
 
 export function redactReportText(input: string, context: RedactionContext): RedactionResult {
-  const digest: PseudonymFn = createPseudonymDigest(context.key);
+  // The key is resolved on the first replacement, so text with nothing to redact
+  // never creates or reads a stored key.
+  let keyedDigest: PseudonymFn | null = null;
+  const digest: PseudonymFn = (kind, value) => {
+    keyedDigest ??= createPseudonymDigest(typeof context.key === 'function' ? context.key() : context.key);
+    return keyedDigest(kind, value);
+  };
   const spans: string[] = [];
   let text = input;
 
@@ -231,8 +242,12 @@ export function redactReportText(input: string, context: RedactionContext): Reda
   const headerName = new RegExp(`(?:^|\\s)([\\p{Lu}][\\p{L}'’-]+(?:[ -][\\p{Lu}][\\p{L}'’-]+)?,\\s*[\\p{Lu}][\\p{L}'’-]+(?:\\s+[\\p{Lu}]\\.?)?)(?=\\s+(?:${DOB_LABEL_SOURCE})\\b)`, 'giu');
   for (const match of input.matchAll(headerName)) addPatient(parsePersonName(match[1]!));
   if (context.profileName) {
-    const tokens = context.profileName.trim().split(/\s+/).filter(token => /^[\p{L}][\p{L}'’.-]+$/u.test(token));
-    if (tokens.length >= 2) addPatient(parsePersonName(tokens.map(token => token[0]!.toUpperCase() + token.slice(1)).join(' ')));
+    const rawTokens = context.profileName.trim().split(/\s+/);
+    const tokens = rawTokens.filter(token => /^[\p{L}][\p{L}'’.-]+$/u.test(token));
+    const looksLikePerson = tokens.length >= 2 && tokens.length <= 4 && tokens.length === rawTokens.length
+      && tokens.every(token => !PROFILE_LABEL_WORDS.has(token.toLowerCase()) && !NON_NAME_WORDS.has(token.toLowerCase())
+        && !(token.length <= 5 && token === token.toUpperCase() && token !== token.toLowerCase()));
+    if (looksLikePerson) addPatient(parsePersonName(tokens.map(token => token[0]!.toUpperCase() + token.slice(1)).join(' ')));
   }
 
   const physicians: Person[] = [];
