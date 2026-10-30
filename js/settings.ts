@@ -71,6 +71,7 @@ import {
   prepareDataEntriesSection,
   resetCurrentProfileUsage,
   saveAutoImportFeedFromSettings,
+  disconnectAutoImportFeedFromSettings,
   checkAutoImportFeedFromSettings,
   clearAutoImportHistoryFromSettings,
 } from './settings-data.js';
@@ -341,6 +342,9 @@ async function handleSettingsClick(event: Event) {
   } else if (action === 'save-auto-import-feed') {
     event.preventDefault();
     saveAutoImportFeedFromSettings();
+  } else if (action === 'disconnect-auto-import-feed') {
+    event.preventDefault();
+    disconnectAutoImportFeedFromSettings();
   } else if (action === 'check-auto-import-feed') {
     event.preventDefault();
     closeSettingsModal();

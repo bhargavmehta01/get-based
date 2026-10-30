@@ -32,6 +32,12 @@ const FEED_TIMEOUT_MS = 15000;
 const PDF_TIMEOUT_MS = 60000;
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+// Bound all retained PDFs together, as well as each individual download.
+const MAX_BATCH_PDF_BYTES = MAX_PDF_BYTES;
+class AutoImportBodyTooLargeError extends Error {
+  constructor() { super('Response is too large'); }
+}
+class AutoImportBatchBudgetError extends Error {}
 
 export type AutoImportCheckStatus = 'off' | 'busy' | 'none' | 'postponed' | 'started' | 'error';
 
@@ -123,12 +129,12 @@ export async function readAutoImportBody(response: Response, maxBytes: number, s
   const declared = Number(response.headers.get('content-length') || 0);
   if (declared > maxBytes) {
     void response.body?.cancel().catch(() => {});
-    throw new Error('Response is too large');
+    throw new AutoImportBodyTooLargeError();
   }
   const reader = typeof response.body?.getReader === 'function' ? response.body.getReader() : null;
   if (!reader) {
     const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength > maxBytes) throw new Error('Response is too large');
+    if (buffer.byteLength > maxBytes) throw new AutoImportBodyTooLargeError();
     return buffer;
   }
   const onAbort = () => { void reader.cancel().catch(() => {}); };
@@ -144,7 +150,7 @@ export async function readAutoImportBody(response: Response, maxBytes: number, s
       total += value.byteLength;
       if (total > maxBytes) {
         void reader.cancel().catch(() => {});
-        throw new Error('Response is too large');
+        throw new AutoImportBodyTooLargeError();
       }
       chunks.push(value);
     }
@@ -179,11 +185,20 @@ export async function fetchAutoImportFeed(feedUrl: string): Promise<AutoImportFe
   return parseAutoImportFeed(doc, feedUrl);
 }
 
-export async function downloadAutoImportPdf(item: AutoImportFeedItem, feedUrl?: string): Promise<File> {
+export async function downloadAutoImportPdf(item: AutoImportFeedItem, feedUrl?: string, maxBytes = MAX_PDF_BYTES): Promise<File> {
   const trusted = [appOrigin(), originOf(feedUrl || item.url)].filter((origin): origin is string => Boolean(origin));
   const bytes = await fetchAndRead(item.url, PDF_TIMEOUT_MS, 'application/pdf', trusted, async (response, signal) => {
     if (!response.ok) throw new Error(`Report download returned HTTP ${response.status}`);
-    return readAutoImportBody(response, MAX_PDF_BYTES, signal);
+    // A declared oversize report is a file failure, even near the batch cap.
+    if (Number(response.headers.get('content-length') || 0) > MAX_PDF_BYTES) {
+      void response.body?.cancel().catch(() => {});
+      throw new AutoImportBodyTooLargeError();
+    }
+    try { return await readAutoImportBody(response, Math.min(maxBytes, MAX_PDF_BYTES), signal); }
+    catch (error) {
+      if (error instanceof AutoImportBodyTooLargeError && maxBytes < MAX_PDF_BYTES) throw new AutoImportBatchBudgetError();
+      throw error;
+    }
   });
   if (!hasPdfSignature(bytes.subarray(0, 8))) throw new Error('Report is not a PDF');
   const created = item.created ? Date.parse(item.created) : NaN;
@@ -212,6 +227,11 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
   const profileId = state.currentProfile;
   const config = readAutoImportFeedConfig(profileId);
   if (!config.url) return 'off';
+  const sourceIsCurrent = () => {
+    const latest = readAutoImportFeedConfig(profileId);
+    return state.currentProfile === profileId && latest.url === config.url
+      && latest.sourceRevision === config.sourceRevision;
+  };
   if (isImportBusy()) {
     if (interactive) deps.notify('An import is already running. Check the auto-import source again when it finishes.', 'info');
     return 'busy';
@@ -222,12 +242,12 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
     listed = await fetchAutoImportFeed(config.url);
   } catch (err) {
     if (isDebugMode()) console.warn('[auto-import] feed check failed:', err);
-    if (state.currentProfile !== profileId) return 'off';
+    if (!sourceIsCurrent()) return 'off';
     recordAutoImportCheck(profileId, err instanceof AutoImportFeedError ? err.message : 'Could not reach the auto-import source');
     deps.notify('Auto-import: could not check the configured source.', 'error', 4000);
     return 'error';
   }
-  if (state.currentProfile !== profileId) return 'off';
+  if (!sourceIsCurrent()) return 'off';
   // Handled ids are filtered over the whole feed before the per-check limit,
   // and earlier failures go behind reports that have not failed yet.
   const latest = readAutoImportFeedConfig(profileId);
@@ -248,7 +268,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
     `${pending.length} new lab ${noun} available from your auto-import source.${batchNote}\n\nReview now? Each report goes through the usual import review, and nothing is saved until you confirm it.`,
     { confirmLabel: 'Review now', cancelLabel: 'Later', tone: 'primary', ariaLabel: 'Review auto-imported reports' },
   );
-  if (!proceed || state.currentProfile !== profileId) return 'postponed';
+  if (!proceed || !sourceIsCurrent()) return 'postponed';
   if (isImportBusy()) {
     deps.notify('An import is already running. New reports will be offered again later.', 'info');
     return 'busy';
@@ -257,17 +277,24 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
   const files: File[] = [];
   const idsByFile = new Map<File, string>();
   const failedIds: string[] = [];
+  let bufferedBytes = 0;
+  let deferred = false;
   for (const item of fresh) {
+    if (bufferedBytes >= MAX_BATCH_PDF_BYTES) { deferred = true; break; }
     try {
-      const file = await downloadAutoImportPdf(item, config.url);
+      const file = await downloadAutoImportPdf(item, config.url, MAX_BATCH_PDF_BYTES - bufferedBytes);
+      bufferedBytes += file.size;
       files.push(file);
       idsByFile.set(file, item.id);
     } catch (err) {
+      if (err instanceof AutoImportBatchBudgetError) { deferred = true; break; }
       if (isDebugMode()) console.warn('[auto-import] report download failed:', err);
       failedIds.push(item.id);
     }
-    if (state.currentProfile !== profileId) return 'off';
+    if (!sourceIsCurrent()) return 'off';
   }
+  if (!sourceIsCurrent()) return 'off';
+  if (deferred) deps.notify('Auto-import: remaining reports will be offered on the next check to limit memory use.', 'info');
   if (failedIds.length) {
     recordAutoImportFailures(profileId, failedIds, listedIds);
     deps.notify(`Auto-import: ${failedIds.length} report(s) could not be downloaded and will be retried later.`, 'error', 4000);
@@ -282,7 +309,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
     deps.notify('Could not load import UI. Reload the app to finish updating, then try again.', 'error');
     return 'error';
   }
-  if (state.currentProfile !== profileId) return 'off';
+  if (!sourceIsCurrent()) return 'off';
   // A manual import may have started while reports were downloading or the
   // import UI was loading. Recheck and claim the shared import lock with no
   // await in between; if it is taken, record nothing and offer again later.
@@ -298,7 +325,7 @@ async function runCheck(interactive: boolean): Promise<AutoImportCheckStatus> {
         const id = idsByFile.get(file);
         // Saved or explicitly skipped in review: never offer again. Failures are
         // retried on later checks, after reports that have not failed.
-        if (!id) return;
+        if (!id || !sourceIsCurrent()) return;
         if (outcome === 'failed') recordAutoImportFailures(profileId, [id], listedIds);
         else markAutoImportItemsDone(profileId, [id], listedIds);
       },

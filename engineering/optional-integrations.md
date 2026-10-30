@@ -39,11 +39,11 @@ backups independently of the browser.
   at Copernicus or Open-Meteo. Missing weather fields fall back browser-direct
   to Open-Meteo with the same rounded location. This is limited plaintext
   processing, not end-to-end encryption.
-- **Auto-import source:** off by default. In Settings → Data → Auto-import
-  Source a user can enter the address of a JSON feed of PDF lab reports, for
+- **Auto-import source:** off by default. In Settings → Data → Lab report
+  source a user can enter the address of a JSON feed of PDF lab reports, for
   example one published by a self-hosted document manager such as
   Paperless-ngx. Only when an address is saved does the app request the feed,
-  on app open and on **Check now**, and then download the PDF reports it lists.
+  on app open and on **Check for reports**, and then download the PDF reports it lists.
   The feed origin (and any origin hosting the listed PDFs) therefore receives
   those requests and their network metadata; no credentials are attached to
   cross-origin requests. Addresses must be HTTPS, except plain HTTP on the
@@ -51,14 +51,21 @@ backups independently of the browser.
   and review, so they reach the configured AI provider like a manually dropped
   PDF and nothing is saved until the user confirms the review. The feed address
   and the ids of reports already imported or skipped are stored per profile in
-  local browser storage. Feed format:
+  local browser storage. **Disconnect** removes the saved address while keeping
+  imported lab data and report history for reconnecting the same address. Saving
+  a different feed address starts a new handled-ID history so reports in another
+  archive cannot be silently suppressed. **Reset report history** makes imported
+  or skipped reports available for review again. Feed setup details are under
+  **Source requirements**. Feed format:
   `{"items":[{"id":"…","title":"…","url":"…","created":"<ISO date>"}]}`, with
   `url` resolved against the feed address and serving `application/pdf`.
   Feeds may list up to 5000 reports; already handled ids are skipped and at
   most 50 new reports are offered per check, oldest first, with reports that
   failed to download or import retried after ones that have not failed. Each
-  download is limited to 50 MB (5 MB for the feed) and must finish within its
-  timeout; redirects to addresses outside the policy above are refused.
+  download is limited to 50 MiB (5 MiB for the feed), with a 50 MiB combined
+  PDF buffer per check. Reports beyond that budget remain available next time.
+  Every request must finish within its timeout; redirects to addresses outside
+  the policy above are refused.
   Requests are sent with `cache: 'no-store'`. Same-origin feed and report
   requests also carry the URL fragment `#getbased-fresh=auto-import`, and only
   requests with that fragment bypass the service worker, which neither answers
@@ -73,6 +80,42 @@ backups independently of the browser.
 For a strictly local setup, disable analytics, leave network features off and
 use same-device inference if needed. An external Knowledge Base or local/LAN
 server is still a separate recipient of whatever is sent to it.
+
+### Test a report source without Paperless
+
+Use Node.js 24 and the installed project dependencies:
+
+```bash
+npm run typescript:build
+node scripts/auto-import-sandbox.mjs
+```
+
+Open `http://127.0.0.1:8002/.local-notes/auto-import-sandbox/start.html`
+and choose **Prepare sandbox and open getbased**. This separate browser origin
+configures synthetic PDFs on port 8003 and a deterministic Custom API fixture;
+it leaves the usual app on port 8000 separate. The setup refuses an origin
+that already has app settings unless it was previously prepared as this sandbox.
+Normal legal notices and the PDF privacy review still apply. No real API key,
+AI model, Paperless installation, or paid inference is needed.
+
+In **Settings → Data → Lab report source**, choose **Check for reports**. Try
+**Later**, then **Review now**, the privacy review, and **Import 2 Markers** or
+**Skip**. Reload and check again to verify handled reports stay handled. The
+launcher also lists empty-feed, invalid-PDF, two-report and temporary-failure
+scenarios. Stop the servers with Ctrl+C; sandbox data remains in that origin's
+browser storage until you clear it. The mock endpoint accepts only prompts
+containing the synthetic fixture marker and does not log or persist prompts.
+
+The maintained browser regression exercises real HTTP, PDF extraction, privacy
+review, explicit saving, reload persistence, deduplication, download retry, and
+skipping:
+
+```bash
+npx playwright test tests/playwright/auto-import-feed-e2e.spec.ts --project=chromium --workers=1
+```
+
+These tests cover getbased's feed contract and import flow. They do not validate
+Paperless authentication, a deployed proxy, or live-model extraction accuracy.
 
 ## AI activation and providers
 

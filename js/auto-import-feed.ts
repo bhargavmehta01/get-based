@@ -8,6 +8,7 @@
 // configured a source.
 
 import { profileStorageKey } from './profile-storage-key.js';
+import { createUniqueId } from './unique-id.js';
 
 export const AUTO_IMPORT_FEED_STORAGE_SUFFIX = 'autoImportFeedV1';
 /**
@@ -43,6 +44,10 @@ export interface AutoImportFeedItem {
 
 export interface AutoImportFeedConfig {
   url: string;
+  /** Owner of handled IDs, retained while the source is disconnected. */
+  historyUrl: string;
+  /** Invalidates checks even if an address is disconnected and reconnected. */
+  sourceRevision: string;
   doneIds: string[];
   /** Ids whose download or import failed, least recently failed first. */
   failedIds: string[];
@@ -50,7 +55,7 @@ export interface AutoImportFeedConfig {
   lastStatus: string | null;
 }
 
-const EMPTY_CONFIG: AutoImportFeedConfig = { url: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null };
+const EMPTY_CONFIG: AutoImportFeedConfig = { url: '', historyUrl: '', sourceRevision: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null };
 
 export class AutoImportFeedError extends Error {
   constructor(message: string) {
@@ -214,6 +219,8 @@ export function readAutoImportFeedConfig(profileId: string): AutoImportFeedConfi
   if (!isRecord(parsed)) return { ...EMPTY_CONFIG, doneIds: [], failedIds: [] };
   return {
     url: typeof parsed.url === 'string' ? parsed.url : '',
+    historyUrl: typeof parsed.historyUrl === 'string' ? parsed.historyUrl : (typeof parsed.url === 'string' ? parsed.url : ''),
+    sourceRevision: typeof parsed.sourceRevision === 'string' ? parsed.sourceRevision : '',
     doneIds: Array.isArray(parsed.doneIds) ? parsed.doneIds.filter((id): id is string => typeof id === 'string') : [],
     failedIds: Array.isArray(parsed.failedIds) ? parsed.failedIds.filter((id): id is string => typeof id === 'string') : [],
     lastCheckedAt: typeof parsed.lastCheckedAt === 'string' ? parsed.lastCheckedAt : null,
@@ -237,13 +244,18 @@ export function isAutoImportFeedConfigured(profileId: string): boolean {
   return Boolean(readAutoImportFeedConfig(profileId).url);
 }
 
-/** Save (or clear, with '') the feed address. Imported history is kept. */
+/** Disconnect keeps history for the same source; replacing it starts a new history. */
 export function saveAutoImportFeedUrl(profileId: string, url: string): boolean {
   const current = readAutoImportFeedConfig(profileId);
   const changed = current.url !== url;
+  const replaced = Boolean(url && url !== current.historyUrl);
   return writeAutoImportFeedConfig(profileId, {
     ...current,
     url,
+    historyUrl: url || current.historyUrl,
+    sourceRevision: changed ? createUniqueId() : current.sourceRevision,
+    doneIds: replaced ? [] : current.doneIds,
+    failedIds: replaced ? [] : current.failedIds,
     lastCheckedAt: changed ? null : current.lastCheckedAt,
     lastStatus: changed ? null : current.lastStatus,
   });

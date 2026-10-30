@@ -95,7 +95,7 @@ describe('auto-import feed parsing', () => {
 describe('auto-import dedupe and storage', () => {
   it('is off by default and stores settings per profile', () => {
     expect(isAutoImportFeedConfigured('alpha')).toBe(false);
-    expect(readAutoImportFeedConfig('alpha')).toEqual({ url: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null });
+    expect(readAutoImportFeedConfig('alpha')).toEqual({ url: '', historyUrl: '', sourceRevision: '', doneIds: [], failedIds: [], lastCheckedAt: null, lastStatus: null });
     expect(saveAutoImportFeedUrl('alpha', FEED)).toBe(true);
     expect(isAutoImportFeedConfigured('alpha')).toBe(true);
     expect(isAutoImportFeedConfigured('beta')).toBe(false);
@@ -201,4 +201,30 @@ describe('auto-import dedupe and storage', () => {
     expect(withAutoImportFreshMarker('https://app.example.test/inbox/1.pdf?x=1#page=2')).toBe('https://app.example.test/inbox/1.pdf?x=1#getbased-fresh=auto-import');
     expect(withAutoImportFreshMarker('not a url')).toBe('not a url');
   });
+});
+
+
+it('keeps handled IDs for a disconnected source but resets them for a replacement', () => {
+  saveAutoImportFeedUrl('alpha', FEED);
+  markAutoImportItemsDone('alpha', ['42']);
+  recordAutoImportFailures('alpha', ['failed'], ['42', 'failed']);
+  expect(readAutoImportFeedConfig('alpha').failedIds).toEqual(['failed']);
+  saveAutoImportFeedUrl('alpha', '');
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['42']);
+  saveAutoImportFeedUrl('alpha', FEED);
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['42']);
+  saveAutoImportFeedUrl('alpha', 'https://other.example.test/feed.json');
+  const replacement = readAutoImportFeedConfig('alpha');
+  expect(replacement.doneIds).toEqual([]);
+  expect(replacement.failedIds).toEqual([]);
+  expect(selectNewAutoImportItems(parseAutoImportFeed({ items: [{ id: '42', url: '/different.pdf' }] }, replacement.url), replacement.doneIds)).toHaveLength(1);
+});
+
+it('retains legacy configured-source history without applying it to a different archive', () => {
+  localStorage.setItem('labcharts-alpha-autoImportFeedV1', JSON.stringify({ url: FEED, doneIds: ['42'] }));
+  saveAutoImportFeedUrl('alpha', FEED);
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['42']);
+  saveAutoImportFeedUrl('alpha', '');
+  saveAutoImportFeedUrl('alpha', 'https://other.example.test/feed.json');
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual([]);
 });

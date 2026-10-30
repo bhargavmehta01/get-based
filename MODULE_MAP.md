@@ -10,7 +10,7 @@ The human-maintained architecture contract is in [`ARCHITECTURE.md`](ARCHITECTUR
 | Metric | Current |
 | --- | ---: |
 | Modules | 1865 |
-| Internal import edges | 5673 |
+| Internal import edges | 5674 |
 | Dynamic internal edges | 138 |
 | Modules participating in cycles | 0 |
 | Cyclic components | 0 |
@@ -269,7 +269,7 @@ Native browser modules shipped with the static application.
 <details><summary><code>auto</code> family — 2 modules</summary>
 
 - [`js/auto-import-feed-runtime.ts`](js/auto-import-feed-runtime.ts) → [`js/auto-import-feed.ts`](js/auto-import-feed.ts), [`js/import-drop-zone-runtime.ts`](js/import-drop-zone-runtime.ts), [`js/import-loader.ts`](js/import-loader.ts), [`js/pdf-import-progress.ts`](js/pdf-import-progress.ts), [`js/state.ts`](js/state.ts), [`js/utils.ts`](js/utils.ts)
-- [`js/auto-import-feed.ts`](js/auto-import-feed.ts) → [`js/profile-storage-key.ts`](js/profile-storage-key.ts)
+- [`js/auto-import-feed.ts`](js/auto-import-feed.ts) → [`js/profile-storage-key.ts`](js/profile-storage-key.ts), [`js/unique-id.ts`](js/unique-id.ts)
 
 </details>
 

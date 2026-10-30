@@ -66,5 +66,5 @@ export function getAutoImportFeedSnapshot(): AutoImportFeedSnapshot {
     ? checked.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : '';
   const status = !config.url ? 'Off' : config.lastStatus ? `${config.lastStatus}${when ? ` · ${when}` : ''}` : 'Not checked yet';
-  return { url: config.url, configured: Boolean(config.url), status, doneCount: config.doneIds.length };
+  return { profileId: state.currentProfile, url: config.url, configured: Boolean(config.url), status, doneCount: config.doneIds.length };
 }

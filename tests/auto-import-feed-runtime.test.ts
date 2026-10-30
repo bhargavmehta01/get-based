@@ -312,3 +312,76 @@ describe('auto-import feed runtime', () => {
     expect(handleBatchPDFs).not.toHaveBeenCalled();
   });
 });
+
+it.each(['feed', 'confirmation', 'download', 'module'].flatMap(stage =>
+  ['disconnect', 'replace', 'reconnect'].map(change => [stage, change])))('invalidates a pending %s after source %s', async (stage, change) => {
+  saveAutoImportFeedUrl('alpha', FEED);
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const paused = new Promise<void>(resolve => { reached = resolve; });
+  const pause = async () => { reached(); await gate; };
+  const handleBatchPDFs = vi.fn(async () => {});
+  const confirm = vi.fn(async () => { if (stage === 'confirmation') await pause(); return true; });
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === FEED) {
+      if (stage === 'feed') await pause();
+      return feedResponse([{ id: '42', url: '/42.pdf' }]);
+    }
+    if (stage === 'download') await pause();
+    return pdfResponse();
+  });
+  install({ fetch: fetchMock as typeof fetch, confirm, loadImportUI: async () => {
+    if (stage === 'module') await pause();
+    return { handleBatchPDFs } as never;
+  } });
+  const pending = checkAutoImportFeed();
+  await paused;
+  saveAutoImportFeedUrl('alpha', '');
+  if (change !== 'disconnect') saveAutoImportFeedUrl('alpha', change === 'replace' ? 'https://replacement.example.test/feed.json' : FEED);
+  release();
+  await pending;
+  expect(handleBatchPDFs).not.toHaveBeenCalled();
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual([]);
+  if (stage === 'feed') { expect(confirm).not.toHaveBeenCalled(); expect(fetchMock).toHaveBeenCalledTimes(1); }
+});
+
+it('does not write an old review result into a replacement source history', async () => {
+  saveAutoImportFeedUrl('alpha', FEED);
+  const { handleBatchPDFs } = install();
+  handleBatchPDFs.mockImplementation(async (files, options) => {
+    saveAutoImportFeedUrl('alpha', 'https://replacement.example.test/feed.json');
+    markAutoImportItemsDone('alpha', ['replacement-report']);
+    for (const file of files) options?.onFileResult?.(file, 'imported');
+  });
+  await checkAutoImportFeed();
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['replacement-report']);
+});
+
+it.each([true, false])('bounds combined PDFs and defers overflow without marking it failed (Content-Length: %s)', async declared => {
+  saveAutoImportFeedUrl('alpha', FEED);
+  const chunk = new Uint8Array(8 * 1024 * 1024);
+  chunk.set(PDF_BYTES);
+  let cancelled = false;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === FEED) return feedResponse([{ id: '1', url: '/1.pdf' }, { id: '2', url: '/2.pdf' }]);
+    let chunks = 0;
+    return new Response(new ReadableStream<Uint8Array>({
+      pull(controller) { if (chunks++ < 4) controller.enqueue(chunk); else controller.close(); },
+      cancel() { cancelled = true; },
+    }), { headers: declared ? { 'Content-Length': String(32 * 1024 * 1024) } : {} });
+  });
+  const { handleBatchPDFs, notify } = install({ fetch: fetchMock as typeof fetch });
+  handleBatchPDFs.mockImplementation(async (files, options) => {
+    expect(files).toHaveLength(1);
+    expect(files[0]!.size).toBe(32 * 1024 * 1024);
+    options?.onFileResult?.(files[0]!, 'imported');
+  });
+  expect(await checkAutoImportFeed()).toBe('started');
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['1']);
+  expect(readAutoImportFeedConfig('alpha').failedIds).toEqual([]);
+  expect(cancelled).toBe(true);
+  expect(notify).toHaveBeenCalledWith(expect.stringContaining('limit memory use'), 'info');
+  expect(await checkAutoImportFeed()).toBe('started');
+  expect(readAutoImportFeedConfig('alpha').doneIds).toEqual(['1', '2']);
+});

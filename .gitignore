@@ -4,6 +4,8 @@
 # Generated optional auto-import source runtime
 /js/auto-import-feed.js
 /js/auto-import-feed-runtime.js
+/scripts/auto-import-sandbox.mjs
+/tests/helpers/auto-import-source-fixture.js
 
 # Generated method-aware body measurement runtime
 /js/body-measurement-model.js

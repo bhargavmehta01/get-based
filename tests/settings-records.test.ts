@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { state } from '../js/state.js';
 import { disposeSettingsRecords, mountSettingsRecords } from '../js/settings-records-component.js';
 import { getDataEntriesSnapshot, getAIUsageSnapshot } from '../js/settings-records-view.js';
-import { renderDataEntriesSection, renderAIUsageSection, refreshDataEntriesSection, resetCurrentProfileUsage, saveAutoImportFeedFromSettings } from '../js/settings-data.js';
-import { readAutoImportFeedConfig, markAutoImportItemsDone } from '../js/auto-import-feed.js';
+import { renderDataEntriesSection, renderAIUsageSection, refreshDataEntriesSection, resetCurrentProfileUsage, saveAutoImportFeedFromSettings, disconnectAutoImportFeedFromSettings, clearAutoImportHistoryFromSettings } from '../js/settings-data.js';
+import { readAutoImportFeedConfig, markAutoImportItemsDone, saveAutoImportFeedUrl } from '../js/auto-import-feed.js';
 
 const originalData = state.importedData;
 const originalProfiles = state.profiles;
@@ -29,7 +29,7 @@ describe('Settings imported records and usage', () => {
     mountSettingsRecords();
     const field = document.getElementById('auto-import-feed-url') as HTMLInputElement;
     expect(field.value).toBe('');
-    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Status: Off');
+    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Off');
     expect((document.querySelector('[data-settings-action="check-auto-import-feed"]') as HTMLButtonElement).disabled).toBe(true);
     field.value = 'javascript:alert(1)';
     saveAutoImportFeedFromSettings();
@@ -38,11 +38,60 @@ describe('Settings imported records and usage', () => {
     saveAutoImportFeedFromSettings();
     expect(readAutoImportFeedConfig('records-test').url).toBe(new URL('/inbox/feed.json', location.href).href);
     expect(readAutoImportFeedConfig('other-profile').url).toBe('');
-    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Status: Not checked yet');
+    expect(document.querySelector('.auto-import-feed-status')!.textContent).toBe('Not checked yet');
     expect((document.querySelector('[data-settings-action="check-auto-import-feed"]') as HTMLButtonElement).disabled).toBe(false);
     markAutoImportItemsDone('records-test', ['a']);
     mountSettingsRecords();
-    expect(document.querySelector('[data-settings-action="clear-auto-import-history"]')!.textContent).toContain('Forget 1 handled report');
+    expect(document.querySelector('[data-settings-action="clear-auto-import-history"]')!.textContent).toBe('Reset report history');
+  });
+
+  it('keeps an unsaved source draft across status refresh and replaces it on a profile switch', () => {
+    document.body.innerHTML = '<section id="auto-import-feed-section"><div id="auto-import-feed-content"></div></section>';
+    mountSettingsRecords();
+    const field = document.getElementById('auto-import-feed-url') as HTMLInputElement;
+    field.value = 'https://draft.example/feed.json'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    mountSettingsRecords();
+    expect(field.value).toBe('https://draft.example/feed.json');
+    state.currentProfile = 'other-profile';
+    window.dispatchEvent(new Event('labcharts-profile-switched'));
+    expect(field.value).toBe('');
+    expect(document.querySelector('[data-auto-import-profile]')!.getAttribute('data-auto-import-profile')).toBe('other-profile');
+  });
+
+  it('disconnects the source while preserving handled-report history and saved lab data', () => {
+    document.body.innerHTML = '<section id="auto-import-feed-section"><div id="auto-import-feed-content"></div></section>';
+    mountSettingsRecords();
+    (document.getElementById('auto-import-feed-url') as HTMLInputElement).value = 'https://archive.example/feed.json';
+    saveAutoImportFeedFromSettings();
+    markAutoImportItemsDone('records-test', ['saved-report']);
+    const before = state.importedData;
+    disconnectAutoImportFeedFromSettings();
+    expect(readAutoImportFeedConfig('records-test')).toMatchObject({ url: '', doneIds: ['saved-report'] });
+    expect(state.importedData).toBe(before);
+  });
+
+  it('retires a history-reset confirmation when its source is replaced', async () => {
+    saveAutoImportFeedUrl(state.currentProfile, 'https://first.example/feed.json');
+    markAutoImportItemsDone(state.currentProfile, ['old-report']);
+    const pending = clearAutoImportHistoryFromSettings();
+    saveAutoImportFeedUrl(state.currentProfile, 'https://replacement.example/feed.json');
+    markAutoImportItemsDone(state.currentProfile, ['new-report']);
+    document.querySelector<HTMLButtonElement>('#confirm-ok')!.click();
+    await pending;
+    expect(readAutoImportFeedConfig(state.currentProfile).doneIds).toEqual(['new-report']);
+  });
+
+  it('retires a history-reset confirmation when its original profile changes', async () => {
+    saveAutoImportFeedUrl('records-test', 'https://archive.example/feed.json');
+    markAutoImportItemsDone('records-test', ['original-report']);
+    saveAutoImportFeedUrl('other-profile', 'https://other.example/feed.json');
+    markAutoImportItemsDone('other-profile', ['other-report']);
+    const pending = clearAutoImportHistoryFromSettings();
+    state.currentProfile = 'other-profile';
+    document.querySelector<HTMLButtonElement>('#confirm-ok')!.click();
+    await pending;
+    expect(readAutoImportFeedConfig('other-profile').doneIds).toEqual(['other-report']);
+    expect(readAutoImportFeedConfig('records-test').doneIds).toEqual(['original-report']);
   });
 
   it('keeps empty and tombstone-only states free of destructive/export controls', () => {
