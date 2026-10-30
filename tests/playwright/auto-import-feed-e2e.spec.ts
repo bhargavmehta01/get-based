@@ -152,17 +152,15 @@ test('manual sandbox launcher configures protected credentials and offers a repo
   const appOrigin = new URL(test.info().project.use.baseURL!).origin;
   const source = await startAutoImportSourceFixture({ allowedOrigins: [appOrigin] });
   try {
-    // The launcher protects origins with existing app settings. Remove only
-    // this disposable test's pre-seeded consent fixtures on its launcher page;
-    // the ordinary returning-user fixtures remain in effect on /app.
-    await page.addInitScript(() => {
-      if (location.pathname === '/__synthetic-sandbox') {
-        for (const key of ['labcharts-legal-acceptance', 'labcharts-ai-transparency-acknowledgement', 'labcharts-ai-route-confirmations']) localStorage.removeItem(key);
-      }
-    });
     await page.route('**/*', route => [appOrigin, source.origin].includes(new URL(route.request().url()).origin) ? route.continue() : route.abort());
     await page.route('**/__synthetic-sandbox', route => route.fulfill({ contentType: 'text/html', body: sandboxLauncherHtml(appOrigin, source.origin) }));
     await page.goto('/__synthetic-sandbox');
+    // Clear only the consent fixtures in this disposable launcher document,
+    // after all init scripts have run. The returning-user fixtures will run
+    // again on /app, without relying on their script registration order.
+    await page.evaluate(() => {
+      for (const key of ['labcharts-legal-acceptance', 'labcharts-ai-transparency-acknowledgement', 'labcharts-ai-route-confirmations']) localStorage.removeItem(key);
+    });
     await page.getByRole('button', { name: 'Prepare sandbox and open getbased' }).click();
     await page.waitForURL('**/app?dev=synthetic-feed-sandbox');
     await page.locator('html[data-app-ready]').waitFor();
