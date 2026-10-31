@@ -212,6 +212,10 @@ describe('review findings on PR #1699', () => {
     expect(first!.slice(5)).toBe(second!.slice(5));
   });
 
+  it('keeps the next line intact when an ID field is empty', () => {
+    expect(run('Patient ID:\nGlucose 91 mg/dL')).toContain('Glucose 91 mg/dL');
+  });
+
   it('replaces letters-only and dotted labeled IDs completely', () => {
     expect(run('Patient ID: ABCDEF  Sex: F')).not.toContain('ABCDEF');
     const dotted = run('MRN: 12.34_56A');
