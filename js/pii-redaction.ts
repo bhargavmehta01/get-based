@@ -15,9 +15,11 @@ export interface RedactionContext {
   readonly profileName?: string | null | undefined;
   /** Profile date of birth (YYYY-MM-DD); every occurrence in the report is treated as the DOB. */
   readonly profileDob?: string | null | undefined;
+  /** Replacements an earlier pass already produced; kept verbatim so a second pass cannot re-replace them. */
+  readonly preserve?: Iterable<string> | undefined;
 }
 
-export interface RedactionResult { readonly text: string; readonly replacements: number; }
+export interface RedactionResult { readonly text: string; readonly replacements: number; readonly produced: readonly string[]; }
 
 export const PATIENT_PLACEHOLDER = '[PATIENT]';
 
@@ -36,7 +38,9 @@ const NON_NAME_WORDS = new Set([
   'collected', 'received', 'reported', 'entered', 'final', 'result', 'results', 'flag', 'units', 'unit', 'reference',
   'interval', 'range', 'test', 'tests', 'lab', 'labs', 'page', 'name', 'status', 'npi', 'clinical', 'info', 'information',
   'fasting', 'yes', 'no', 'not', 'the', 'and', 'for', 'of', 'mrn', 'acct', 'control', 'requisition', 'accession',
-  'default', 'profile',
+  'default', 'profile', 'service', 'center', 'centre', 'copy', 'portal', 'summary', 'history', 'instructions', 'education',
+  'demographics', 'identification', 'signature', 'consent', 'location', 'value', 'values', 'type', 'source', 'comments', 'notes',
+  'unknown', 'none', 'n/a', 'provided', 'available', 'redacted', 'anonymous', 'withheld', 'on', 'file', 'is', 'to', 'be',
   'pohlaví', 'pohlavi', 'věk', 'vek', 'datum', 'narození', 'narozeni', 'adresa', 'lékař', 'lekar', 'pacient', 'jméno', 'jmeno',
 ]);
 // Real first names that are also common report words: replaced only inside full-name forms, never standalone.
@@ -73,7 +77,7 @@ export function parseReportDate(raw: string): ParsedDate | null {
     const a = +match[1]!, b = +match[2]!;
     y = +match[3]!;
     if (a > 12) { d = a; m = b; } else { m = a; d = b; }
-  } else if ((match = value.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/))) {
+  } else if ((match = value.match(/^([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/))) {
     m = MONTHS.indexOf(match[1]!.toLowerCase()) + 1;
     d = +match[2]!; y = +match[3]!;
     if (m === 0) return null;
@@ -94,9 +98,11 @@ function formatLike(raw: string, date: ParsedDate): string {
       ? `${pad(date.d, match[1])}${match[2]}${pad(date.m, match[3])}${match[2]}${date.y}`
       : `${pad(date.m, match[1])}${match[2]}${pad(date.d, match[3])}${match[2]}${date.y}`;
   }
-  if ((match = raw.match(/^([A-Za-z]{3})([a-z]*)(\.?)\s+\d{1,2}(,?)\s+\d{4}$/))) {
-    const name = MONTH_NAMES[date.m - 1]!;
-    return `${match[2] ? name : name.slice(0, 3)}${match[3]} ${date.d}${match[4]} ${date.y}`;
+  if ((match = raw.match(/^([A-Za-z]{3})([A-Za-z]*)(\.?)\s+\d{1,2}(,?)\s+\d{4}$/))) {
+    const full = MONTH_NAMES[date.m - 1]!;
+    const name = match[2] ? full : full.slice(0, 3);
+    const upper = /^[A-Z]+$/.test(match[1]! + match[2]!);
+    return `${upper ? name.toUpperCase() : name}${match[3]} ${date.d}${match[4]} ${date.y}`;
   }
   return raw;
 }
@@ -110,7 +116,7 @@ function segmentValue(rest: string) {
 }
 
 /** Parses a person name at the start of `value`; returns null when it does not look like one. */
-export function parsePersonName(value: string): Person | null {
+export function parsePersonName(value: string, options: { allowLowercase?: boolean; minTokens?: number } = {}): Person | null {
   const tokens = value.trim().split(/\s+/);
   const kept: string[] = [];
   const raw: string[] = [];
@@ -122,7 +128,9 @@ export function parsePersonName(value: string): Person | null {
     kept.push(token);
     raw.push(token);
   }
-  if (kept.length === 0 || !/^\p{Lu}/u.test(kept[0]!)) return null;
+  if (kept.length === 0 || kept.length < (options.minTokens ?? 1)) return null;
+  // Lowercase values are accepted only behind an explicit label, and only as a full name.
+  if (!/^\p{Lu}/u.test(kept[0]!) && !(options.allowLowercase && kept.length >= 2)) return null;
   const clean = (token: string) => token.replace(/[,.]+$/, '');
   const commaIndex = kept.findIndex(token => token.endsWith(','));
   let first = '', last = '', middle = '';
@@ -214,6 +222,13 @@ export function redactReportText(input: string, context: RedactionContext): Reda
     return out;
   };
 
+  // ── Values an earlier pass produced stay exactly as they are ──
+  const preserved = [...new Set(context.preserve ?? [])].filter(value => value.trim().length >= 4).sort((a, b) => b.length - a.length);
+  if (preserved.length) {
+    text = text.replace(new RegExp(preserved.map(escapeRegExp).join('|'), 'g'), match => protect(match));
+  }
+  const preservedCount = spans.length;
+
   // ── Emails ──
   text = text.replace(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g, match =>
     protect(`[EMAIL-${code('email', match.toLowerCase())}]`));
@@ -232,10 +247,18 @@ export function redactReportText(input: string, context: RedactionContext): Reda
   const addPatient = (person: Person | null) => { if (person && person.last) patients.push(person); };
   const patientLabel = /(?:^|[^\p{L}])(?:(?:patient|full|legal)\s+name|(?<!(?:physician|doctor|provider|clinician|facility|lab|laboratory|test|company|practice|clinic|hospital|ordering|referring|plan|insurance|file|user)\s+)name|patient|surname|last\s+name|first\s+name|jm[ée]no(?:\s+a\s+p[řr][íi]jmen[íi])?|p[řr][íi]jmen[íi]|pacient)\s*:\s*/giu;
   const czechPatientLabel = /(?:^|[^\p{L}])(?:jm[ée]no|pacient|p[řr][íi]jmen[íi])\s+(?=\p{Lu})/giu;
-  for (const label of [patientLabel, czechPatientLabel]) {
-    for (const match of input.matchAll(label)) {
+  // English labels followed by a space instead of a colon ("Patient Jane Smith"): only at the start of a
+  // line or column, and only as a full capitalized name, so headings like "Patient Report" stay.
+  const spacedPatientLabel = /(?:^|\n|\t|[ ]{2,})(?:(?:patient|full|legal)\s+name|patient|name)[ \t]+(?=\p{Lu})/giu;
+  const labelRuns: Array<{ re: RegExp; options: { allowLowercase?: boolean; minTokens?: number } }> = [
+    { re: patientLabel, options: { allowLowercase: true } },
+    { re: czechPatientLabel, options: {} },
+    { re: spacedPatientLabel, options: { minTokens: 2 } },
+  ];
+  for (const { re, options } of labelRuns) {
+    for (const match of input.matchAll(re)) {
       const rest = input.slice(match.index! + match[0].length).split('\n')[0]!;
-      addPatient(parsePersonName(segmentValue(rest)));
+      addPatient(parsePersonName(segmentValue(rest), options));
     }
   }
   // Header layouts such as "Doe, Jane  DOB: 01/02/1990  Patient Report".
@@ -278,7 +301,7 @@ export function redactReportText(input: string, context: RedactionContext): Reda
 
   // ── Dates of birth: keep the year, keyed month/day, every occurrence ──
   if (dobKeys.size > 0) {
-    text = text.replace(new RegExp(`(?<!\\d)${DATE_SOURCE}(?!\\d)`, 'g'), raw => {
+    text = text.replace(new RegExp(`(?<!\\d)${DATE_SOURCE}(?!\\d)`, 'gi'), raw => {
       const parsed = parseReportDate(raw);
       if (!parsed || !dobKeys.has(dateKey(parsed))) return raw;
       const bytes = digest('dob', dateKey(parsed));
@@ -307,20 +330,31 @@ export function redactReportText(input: string, context: RedactionContext): Reda
     text = text.replace(new RegExp(`${NOT_WORD_BEFORE}${source}${NOT_WORD_AFTER}`, 'giu'), () => protect(replacement));
   }
 
-  // ── Labeled identifiers: keyed, format-preserving (same kind for all labels) ──
-  const idLabel = /((?:^|[^\p{L}])(?:patient\s*(?:id|no\.?|number)|id\s*pacienta|[čc][íi]slo\s*pacienta|account\s*(?:no\.?|number|#)|acct\.?\s*(?:no\.?|#)?|mrn|medical\s*record(?:\s*(?:no\.?|number))?|specimen(?:\s*(?:id|no\.?|number))?|accession(?:\s*(?:no\.?|number))?|control\s*(?:id|no\.?|number)|requisition(?:\s*(?:id|no\.?|number))?|member\s*id|subscriber\s*id|group\s*(?:no\.?|number|id)|policy(?:\s*(?:no\.?|number))?|insurance\s*(?:no\.?|number|id)|[čc][íi]slo\s*(?:poji[šs]t[ěe]n[cí]e?|insurance)|poji[šs][tť]ovna|npi|ssn|social\s+security(?:\s+(?:no\.?|number))?|rodn[ée]\s*[čc][íi]slo|birth\s*number|r\.\s?[čc]\.)\s*[:#]?\s*)([A-Za-z0-9][A-Za-z0-9/-]*\d[A-Za-z0-9/-]*|\d)/giu;
-  text = text.replace(idLabel, (_match, label: string, value: string) => label + protect(formatPreserving('id', value)));
-
   // ── Czech/Slovak birth numbers: real year kept, keyed rest, female offset kept ──
-  text = text.replace(/\b(\d{2})(0[1-9]|1[0-2]|5[1-9]|6[0-2])(0[1-9]|[12]\d|3[01])\/(\d{3,4})\b/g, (match, y: string, m: string, _d: string, suffix: string) => {
+  const BIRTH_NUMBER = /^(\d{2})(0[1-9]|1[0-2]|5[1-9]|6[0-2])(0[1-9]|[12]\d|3[01])\/(\d{3,4})$/;
+  const birthNumber = (match: string) => {
+    const [, y, m, , suffix] = match.match(BIRTH_NUMBER)!;
     const bytes = digest('birth-number', match.replace('/', ''));
     const female = Number(m) > 50;
     const month = 1 + (bytes[0]! % 12) + (female ? 50 : 0);
     const day = 1 + (bytes[1]! % 28);
     let tail = '';
-    for (let i = 0; i < suffix.length; i++) tail += String(bytes[2 + i]! % 10);
-    return protect(`${y}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}/${tail}`);
+    for (let i = 0; i < suffix!.length; i++) tail += String(bytes[2 + i]! % 10);
+    return `${y}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}/${tail}`;
+  };
+  const idValue = (value: string) => protect(BIRTH_NUMBER.test(value) ? birthNumber(value) : formatPreserving('id', value));
+
+  // ── Labeled identifiers: keyed, format-preserving (same kind for all labels) ──
+  const idLabel = /((?:^|[^\p{L}])(?:patient\s*(?:id|no\.?|number)|id\s*pacienta|[čc][íi]slo\s*pacienta|account\s*(?:no\.?|number|#)|acct\.?\s*(?:no\.?|#)?|mrn|medical\s*record(?:\s*(?:no\.?|number))?|specimen(?:\s*(?:id|no\.?|number))?|accession(?:\s*(?:no\.?|number))?|control\s*(?:id|no\.?|number)|requisition(?:\s*(?:id|no\.?|number))?|member\s*id|subscriber\s*id|group\s*(?:no\.?|number|id)|policy(?:\s*(?:no\.?|number))?|insurance\s*(?:no\.?|number|id)|[čc][íi]slo\s*(?:poji[šs]t[ěe]n[cí]e?|insurance)|poji[šs][tť]ovna|npi|ssn|social\s+security(?:\s+(?:no\.?|number))?|rodn[ée]\s*[čc][íi]slo|birth\s*number|r\.\s?[čc]\.)\s*[:#]?\s*)([A-Za-z0-9][A-Za-z0-9_./-]*\d[A-Za-z0-9_./-]*|\d)/giu;
+  text = text.replace(idLabel, (_match, label: string, value: string) => label + idValue(value.replace(/[./]+$/, '')) + value.slice(value.replace(/[./]+$/, '').length));
+  // Explicit ID labels with a colon or # take any value up to the next space, letters-only included.
+  const explicitIdLabel = /((?:^|[^\p{L}])(?:patient\s*(?:id|no\.?|number)|id\s*pacienta|[čc][íi]slo\s*pacienta|account\s*(?:no\.?|number|#)|acct\.?\s*(?:no\.?|#)?|mrn|medical\s*record\s*(?:no\.?|number)|specimen\s*(?:id|no\.?|number)|accession\s*(?:no\.?|number)|control\s*(?:id|no\.?|number)|requisition\s*(?:id|no\.?|number)|member\s*id|subscriber\s*id|group\s*(?:no\.?|number|id)|policy\s*(?:no\.?|number)|insurance\s*(?:no\.?|number|id))\s*[:#]\s*)([\p{L}\p{N}][\p{L}\p{N}_./-]*)/giu;
+  text = text.replace(explicitIdLabel, (_match, label: string, value: string) => {
+    const core = value.replace(/[./]+$/, '');
+    return label + idValue(core) + value.slice(core.length);
   });
+
+  text = text.replace(/\b\d{2}(?:0[1-9]|1[0-2]|5[1-9]|6[0-2])(?:0[1-9]|[12]\d|3[01])\/\d{3,4}\b/g, match => protect(birthNumber(match)));
 
   // ── SSN ──
   text = text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, match => protect(formatPreserving('id', match)));
@@ -331,19 +365,38 @@ export function redactReportText(input: string, context: RedactionContext): Reda
     return protect(`[PHONE-${code('phone', digits.slice(-10))}]`);
   };
   const phonePatterns = [
-    /(?<=\b(?:tel|phone|fax|ph|mobile|mobil|cell|telefon)\.?\s*:?\s*)\+?[\d(][\d\s().-]{6,}\d/gi,
+    // One field only: single spaces between groups, no column gaps or line breaks. "Ph" is matched only with
+    // a capital P and a period or colon so "pH 7.40" stays a lab value.
+    /(?<=(?:\b(?:[Tt]el|TEL|[Pp]hone|PHONE|[Ff]ax|FAX|[Mm]obile?|MOBILE?|[Cc]ell|CELL|[Tt]elefon|TELEFON)\.?|\bPh(?:\.|[ \t]*:))[ \t]*:?[ \t]*)\+?[\d(][\d().-]*(?: [\d(][\d().-]*){0,4}/g,
     /\(\d{3}\)\s*\d{3}[\s.-]\d{4}\b/g,
     /(?<![\d-])\d{3}[.-]\d{3}[.-]\d{4}\b(?![-.]\d)/g,
     /\+\d{1,3}[\s-]?\(?\d{2,3}\)?[\s.-]?\d{3}[\s.-]?\d{3,4}\b/g,
   ];
-  for (const pattern of phonePatterns) {
+  /** The labeled match may run into following numbers; keep only the groups that form one phone number. */
+  const phonePrefix = (match: string) => {
+    const groups = match.split(' ');
+    const enough = match.startsWith('+') ? 11 : 10;
+    let digits = 0;
+    let used = 0;
+    for (const group of groups) {
+      const count = group.replace(/\D/g, '').length;
+      if (used > 0 && (digits >= enough || digits + count > 15)) break;
+      digits += count;
+      used++;
+    }
+    const prefix = groups.slice(0, used).join(' ').replace(/[^\d)]+$/, '');
+    return digits >= 7 && digits <= 15 ? prefix : '';
+  };
+  phonePatterns.forEach((pattern, index) => {
     text = text.replace(pattern, (match: string, ...args: unknown[]) => {
       const offset = args[args.length - 2] as number;
       const whole = args[args.length - 1] as string;
       if (UNIT_KEYWORDS.test(lineAt(whole, offset))) return match;
-      return phoneReplacement(match);
+      if (index > 0) return phoneReplacement(match);
+      const prefix = phonePrefix(match);
+      return prefix ? phoneReplacement(prefix) + match.slice(prefix.length) : match;
     });
-  }
+  });
 
   // ── Unlabeled specimen-style IDs and long digit runs on non-result lines ──
   text = text.replace(/\b\d{3}-\d{3}-\d{4}-\d\b/g, match => protect(formatPreserving('id', match)));
@@ -354,5 +407,6 @@ export function redactReportText(input: string, context: RedactionContext): Reda
   });
 
   const restored = text.replace(/\uE000([\uE100-\uF8FF])\uE001/g, (_match, index: string) => spans[index.charCodeAt(0) - 0xE100] ?? '');
-  return { text: restored, replacements: spans.length };
+  const produced = spans.slice(preservedCount);
+  return { text: restored, replacements: produced.length, produced };
 }

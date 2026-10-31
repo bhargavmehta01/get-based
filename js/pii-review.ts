@@ -419,8 +419,10 @@ export function reviewPIIBeforeSend(
           },
           abortController.signal,
           onThinking,
-        ).then(() => {
+        ).then(finalText => {
           flushToTextarea();
+          // Send exactly what the non-streaming path would: the finalized, re-checked text.
+          if (typeof finalText === 'string' && finalText) textarea.value = finalText;
           textarea.readOnly = false;
           sendButton.disabled = false;
           statusElement.textContent = `Complete \u2014 ${characterCount.toLocaleString()} chars \u2014 click text to edit`;

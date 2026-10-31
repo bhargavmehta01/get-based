@@ -218,7 +218,9 @@ export function validatePIIResult(result: string | null | undefined, pdfText: st
 export function finalizePIIResult(result: string, pdfText: string) {
   const validationError = validatePIIResult(result, pdfText);
   if (validationError) throw new Error(validationError);
-  const deterministic = obfuscatePDFText(result).obfuscated;
+  // The model saw the deterministic pre-pass output; keep those replacements as they are
+  // so the second pass only catches what the model left behind.
+  const deterministic = obfuscatePDFText(result, obfuscatePDFText(pdfText).produced).obfuscated;
   const normalizedFinal = normalizePIIComparison(deterministic);
   const retained = extractSensitiveValues(pdfText).filter(value => normalizedFinal.includes(value));
   if (retained.length > 0) throw new Error(`Privacy check found ${retained.length} original identifier${retained.length === 1 ? '' : 's'} still present`);
@@ -473,14 +475,15 @@ function currentProfileName() {
   return typeof active?.name === 'string' ? active.name : null;
 }
 
-export function obfuscatePDFText(pdfText: string) {
+export function obfuscatePDFText(pdfText: string, preserve?: Iterable<string>) {
   const original = pdfText;
-  const { text, replacements } = redactReportText(pdfText, {
+  const { text, replacements, produced } = redactReportText(pdfText, {
     key: () => getPIIPseudonymKey(),
     profileName: currentProfileName(),
     profileDob: state.profileDob,
+    preserve,
   });
-  return { obfuscated: text, original, replacements };
+  return { obfuscated: text, original, replacements, produced };
 }
 
 // extractPatientName dropped — too unreliable across PDF layouts

@@ -189,3 +189,57 @@ describe('names that are also calendar words', () => {
     expect(out).toBe(`Jmeno: ${PATIENT_PLACEHOLDER}\nPatient Name: ${PATIENT_PLACEHOLDER}\nCollected: May 3, 2026\n${PATIENT_PLACEHOLDER}`);
   });
 });
+
+describe('review findings on PR #1699', () => {
+  const run = (input: string, extra: Record<string, unknown> = {}) => redactReportText(input, {key: 'k', profileName: 'Demo', ...extra}).text;
+
+  it('removes names after English labels without a colon, but keeps headings', () => {
+    expect(run('Patient Jane Smith\nGlucose 91 mg/dL')).toBe(`Patient ${PATIENT_PLACEHOLDER}\nGlucose 91 mg/dL`);
+    expect(run('Name Jane Smith  DOB: 1990')).not.toMatch(/Jane|Smith/);
+    expect(run('Patient Report\nPatient Details\nPatient Service Center')).toBe('Patient Report\nPatient Details\nPatient Service Center');
+  });
+
+  it('removes lowercase full names behind an explicit label', () => {
+    expect(run('Patient: jane smith\nGlucose 91 mg/dL')).toBe(`Patient: ${PATIENT_PLACEHOLDER}\nGlucose 91 mg/dL`);
+    expect(run('Name: unknown\nGlucose 91 mg/dL')).toBe('Name: unknown\nGlucose 91 mg/dL');
+  });
+
+  it('replaces uppercase birth dates and keeps their year and case', () => {
+    const out = run('DOB: JAN 2, 1990\nSeen JAN 2, 1990');
+    expect(out).not.toContain('JAN 2, 1990');
+    expect(out).toMatch(/DOB: [A-Z]{3} \d{1,2}, 1990/);
+    const [first, second] = out.split('\n');
+    expect(first!.slice(5)).toBe(second!.slice(5));
+  });
+
+  it('replaces letters-only and dotted labeled IDs completely', () => {
+    expect(run('Patient ID: ABCDEF  Sex: F')).not.toContain('ABCDEF');
+    const dotted = run('MRN: 12.34_56A');
+    expect(dotted).not.toMatch(/12|34|56/);
+    expect(dotted).toMatch(/^MRN: \d\d\.\d\d_\d\d[A-Z]$/);
+    expect(run('Specimen Type: Serum')).toBe('Specimen Type: Serum');
+  });
+
+  it('gives a labeled and an unlabeled birth number the same replacement', () => {
+    const out = run('Rodné číslo: 856115/1234\nPacient 856115/1234');
+    const [labeled, bare] = out.split('\n');
+    const value = labeled!.split(': ')[1]!;
+    expect(value).not.toBe('856115/1234');
+    expect(value).toMatch(/^85(5[1-9]|6[0-2])\d{2}\/\d{4}$/);
+    expect(bare).toContain(value);
+  });
+
+  it('leaves pH values alone and keeps numbers after a phone number', () => {
+    expect(run('pH: 7.40 7.35-7.45')).toBe('pH: 7.40 7.35-7.45');
+    const out = run('Phone: 404 555 0182 7.40 120\nPh: 770-555-0143');
+    expect(out).toMatch(/^Phone: \[PHONE-[A-Z2-9]{4}\] 7\.40 120\nPh: \[PHONE-[A-Z2-9]{4}\]$/);
+  });
+
+  it('does not re-replace values an earlier pass produced', () => {
+    const input = 'DOB: 03/14/1999\nPatient ID: PX4471';
+    const first = redactReportText(input, {key: 'k'});
+    const second = redactReportText(first.text, {key: 'k', preserve: first.produced});
+    expect(second.text).toBe(first.text);
+    expect(second.replacements).toBe(0);
+  });
+});
