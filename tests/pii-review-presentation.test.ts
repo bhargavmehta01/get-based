@@ -130,6 +130,16 @@ describe('genuine PII children and retained controller',()=>{
     await Promise.resolve();await Promise.resolve();
     click('#pii-review-regex');click('#pii-review-cancel');expect(await done).toBe('cancel');
   });
+  it('ignores a delayed failure from a stream the regex fallback replaced',async()=>{
+    const deps={obfuscatePDFText:()=>({original:'Alice',obfuscated:'Bob',replacements:1}),unloadOllamaPIIModel:vi.fn()};
+    // Like the reachability probe: an abort surfaces later as a plain Error.
+    const pending=(_:unknown,signal:AbortSignal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('unreachable')),{once:true}));
+    const done=reviewPIIBeforeSend('Alice',{streamFn:pending,reportUnavailable:true},deps);
+    click('#pii-review-regex');
+    await Promise.resolve();await Promise.resolve();await Promise.resolve();
+    expect(window.document.querySelector('#pii-stream-status')!.textContent).not.toContain('Error:');
+    click('#pii-review-cancel');expect(await done).toBe('cancel');
+  });
   it('treats cancel after a successful stream as an explicit skip',async()=>{
     const deps={obfuscatePDFText:()=>({original:'Alice',obfuscated:'Bob',replacements:1}),unloadOllamaPIIModel:vi.fn()};
     const done=reviewPIIBeforeSend('Alice',{streamFn:onChunk=>{onChunk('Bob');return Promise.resolve();},reportUnavailable:true},deps);

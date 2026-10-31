@@ -369,7 +369,11 @@ export function reviewPIIBeforeSend(
       const thinkingContent = overlay.querySelector<HTMLElement>('#pii-thinking-content');
 
       const startStream = () => {
-        abortController = new AbortController();
+        const controller = new AbortController();
+        abortController = controller;
+        // A stream that was stopped, replaced by a retry, or abandoned for the
+        // regex fallback must not touch the modal or the failure state.
+        const isStale = () => controller.signal.aborted || abortController !== controller;
         textarea.value = '';
         textarea.style.display = '';
         textarea.readOnly = true;
@@ -433,9 +437,10 @@ export function reviewPIIBeforeSend(
               requestAnimationFrame(flushToTextarea);
             }
           },
-          abortController.signal,
+          controller.signal,
           onThinking,
         ).then(() => {
+          if (isStale()) return;
           flushToTextarea();
           modelFailed = false;
           textarea.readOnly = false;
@@ -450,6 +455,7 @@ export function reviewPIIBeforeSend(
           }
           showDiffPreview(textarea.value);
         }).catch(error => {
+          if (isStale()) return;
           flushToTextarea();
           if (error.name === 'AbortError') return;
           modelFailed = true;
