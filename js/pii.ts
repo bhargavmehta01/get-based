@@ -220,7 +220,7 @@ export function finalizePIIResult(result: string, pdfText: string) {
   if (validationError) throw new Error(validationError);
   // The model saw the deterministic pre-pass output; keep those replacements as they are
   // so the second pass only catches what the model left behind.
-  const deterministic = obfuscatePDFText(result, obfuscatePDFText(pdfText).produced).obfuscated;
+  const deterministic = obfuscatePDFText(result, obfuscatePDFText(pdfText).produced ?? []).obfuscated;
   const normalizedFinal = normalizePIIComparison(deterministic);
   const retained = extractSensitiveValues(pdfText).filter(value => normalizedFinal.includes(value));
   if (retained.length > 0) throw new Error(`Privacy check found ${retained.length} original identifier${retained.length === 1 ? '' : 's'} still present`);
@@ -475,7 +475,7 @@ function currentProfileName() {
   return typeof active?.name === 'string' ? active.name : null;
 }
 
-export function obfuscatePDFText(pdfText: string, preserve?: Iterable<string>) {
+export function obfuscatePDFText(pdfText: string, preserve?: Iterable<string>): { obfuscated: string; original: string; replacements: number; produced?: readonly string[] } {
   const original = pdfText;
   const { text, replacements, produced } = redactReportText(pdfText, {
     key: () => getPIIPseudonymKey(),
